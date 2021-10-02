@@ -22,7 +22,7 @@ w.as_buffer_content = function(self)
   return vim.tbl_flatten {
     "# " .. self.title,
     "",
-    self.body,
+    unpack(self.body),
   }
 end
 
@@ -64,7 +64,18 @@ w.merge = function(self, buflines, cb)
     return
   end
   local change = self:parse(buflines)
-  local diff = jobs.update_local_info(self, change)
+  local diff = {}
+
+  diff.name = self.name ~= change.name
+  diff.title = self.title ~= change.title
+  diff.body = self.body ~= change.body
+
+  if diff.name then
+    jobs.set_name(self.name, change.name, self.cwd):sync()
+  end
+  if diff.body then
+    jobs.set_description(self.name, change.body, self.cwd):sync()
+  end
 
   self.name = diff.name and change.name or self.name
   self.title = diff.title and change.title or self.title
@@ -98,7 +109,7 @@ w.new = function(self, arg, cwd, typeinfo)
   if type(arg) == "string" then
     o.name = arg == "current" and jobs.get_name(cwd):sync()[1] or arg
     o.title = fmt.into_title(o.name)
-    o.body = ""
+    o.body = jobs.get_description(o.name, cwd):sync()
   end
 
   o.has_pr = jobs.has_remote(o.name, o.cwd)
