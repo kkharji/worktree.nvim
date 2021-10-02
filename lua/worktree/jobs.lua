@@ -148,29 +148,16 @@ end
 
 jobs.update_local_info = function(org, new)
   local diff = {}
-  local update_name, update_body
 
-  if new.name ~= org.name then
-    update_name = jobs.set_name(org.name, new.name, org.cwd)
-    diff.name = true
-    diff.title = true
-  end
-  if new.body ~= org.body then
-    update_body = jobs.set_description(org.name, org.body, org.cwd)
-    diff.body = true
-  end
+  diff.name = new.name ~= org.name
+  diff.title = new.title ~= org.title
+  diff.body = new.body ~= org.body
 
-  if not update_name and not update_body then
-    return
+  if diff.name then
+    jobs.set_name(org.name, new.name, org.cwd):sync()
   end
-
-  if update_name and not update_body then
-    update_name:start()
-  elseif update_body and not update_name then
-    update_body:start()
-  else
-    update_name:and_then_on_success(update_body)
-    update_name:start()
+  if diff.body then
+    jobs.set_description(org.name, org.body, org.cwd):sync()
   end
 
   return diff
