@@ -21,9 +21,9 @@ end
 ---Create PR
 ---@param cwd string @current working directory
 ---@param name string @branch name
-actions.open_pr = function(name, cwd)
+actions.pr_open = function(name, cwd)
   cwd = cwd or vim.loop.cwd()
-  view.open_pr(name, cwd)
+  view.pr_open(name, cwd)
 end
 
 return actions
