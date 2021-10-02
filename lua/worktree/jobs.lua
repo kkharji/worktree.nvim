@@ -13,7 +13,8 @@ end
 
 local notify = util.notify {
   checkout = { "Failed to checkout/create %s: %s", "checked out/created %s" },
-  merge = { "Failed to merge %s/%s/: %s" },
+  merge_remote = { "Failed to merge %s/%s/: %s" },
+  merge = { "Failed to merge %s: %s", "Squashed and merged successfully %s" },
   get_name = { "Failed to get current branch name of %s: %s" },
   get_description = { "Creating new Description" },
   set_name = { "Failed to update name from '%s' to '%s': %s", "Updated name from '%s' to '%s'" },
@@ -39,6 +40,7 @@ end
 jobs.has_orign = function(cwd)
   return Job { "git", "config", "remote.upstream.url", cwd = cwd }
 end
+
 jobs.get_remote = function(cwd)
   local remote = "origin"
   local args = { "git", "config", "remote.upstream.url", cwd = cwd, sync = true }
@@ -70,10 +72,16 @@ jobs.checkout = function(branch_name, cwd)
   return Job(args)
 end
 
-jobs.merge = function(branch_name, cwd)
+jobs.merge_remote = function(branch_name, cwd)
   local remote = jobs.get_remote(cwd)
   local args = { "git", "merge", remote, branch_name, cwd = cwd }
-  args.on_exit = notify("merge", remote, branch_name)
+  args.on_exit = notify("merge_remote", remote, branch_name)
+  return Job(args)
+end
+
+jobs.merge = function(branch_name, cwd)
+  local args = { "git", "merge", "--squash", branch_name, cwd = cwd }
+  args.on_exit = notify("merge", branch_name)
   return Job(args)
 end
 
@@ -149,21 +157,15 @@ jobs.set_description = function(branch_name, description, cwd)
   return Job(args)
 end
 
-jobs.update_local_info = function(org, new)
-  local diff = {}
-
-  diff.name = new.name ~= org.name
-  diff.title = new.title ~= org.title
-  diff.body = new.body ~= org.body
-
-  if diff.name then
-    jobs.set_name(org.name, new.name, org.cwd):sync()
-  end
-  if diff.body then
-    jobs.set_description(org.name, org.body, org.cwd):sync()
+jobs.commit = function(title, body, cwd)
+  local args = { "git", "commit", "-m", title, cwd = cwd }
+  body = vim.split(body, "\n")
+  for _, line in ipairs(body) do
+    args[#args + 1] = "-m"
+    args[#args + 1] = line
   end
 
-  return diff
+  return Job(args)
 end
 
 jobs.repo_fork = function(cwd)

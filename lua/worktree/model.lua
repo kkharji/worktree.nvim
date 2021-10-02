@@ -19,22 +19,13 @@ w.__index = w
 ---Format buffer according with branch configurations
 ---@return string[]
 w.as_buffer_content = function(self)
-  return vim.tbl_flatten {
-    "# " .. self.title,
-    "",
-    unpack(self.body),
-  }
+  return vim.tbl_flatten { "# " .. self.title, "", unpack(self.body) }
 end
 
 ---Format with a given branch choice
 ---@return string[]
 w.template = function(_)
-  return {
-    "# ",
-    "",
-    "#### Purpose",
-    "",
-  }
+  return { "# ", "", "#### Purpose", "" }
 end
 
 ---Parse bufferline to {title, name, body}
@@ -63,7 +54,7 @@ end
 ---Reflect changes made in written format with local name, description and if
 ---the branch has pr, update pr
 ---@param buflines string[]
-w.merge = function(self, buflines, cb)
+w.update = function(self, buflines, cb)
   if not buflines then
     if cb then
       cb()
@@ -99,36 +90,13 @@ w.merge = function(self, buflines, cb)
   end
 end
 
----@param arg string[]
----@param cwd string @current working directory to repo
----@overload fun(self: WorkTree, name: string, cwd: string): WorkTree
----@return WorkTree
-w.new = function(self, arg, cwd, typeinfo)
-  local o = { cwd = cwd }
-
-  if type(arg) == "table" then
-    local p = self:parse(arg, typeinfo)
-    o.name, o.title, o.body, o.type = p.name, p.title, p.body, p.type
-  end
-
-  if type(arg) == "string" then
-    o.name = arg == "current" and jobs.get_name(cwd):sync()[1] or arg
-    o.title = fmt.into_title(o.name)
-    o.body = jobs.get_description(o.name, cwd):sync()
-  end
-
-  o.has_pr = jobs.has_remote(o.name, o.cwd)
-
-  return setmetatable(o, self)
-end
-
 ---Create new branch through checking out master, merging recent remote,
 ---checking out the new branch out of base and lastly set description
 w.create = function(self, cb)
   local base = "master" -- TODO: base can be either main or master
   local checkout = jobs.checkout(base, self.cwd)
   local has_orign = jobs.has_orign(self.cwd)
-  local merge = jobs.merge(base, self.cwd)
+  local merge = jobs.merge_remote(base, self.cwd)
   local new = jobs.checkout(self.name, self.cwd)
   local describe = jobs.set_description(self.name, self.body, self.cwd)
 
@@ -150,10 +118,9 @@ end
 
 ---Open new pr for worktree using { buflines } if available
 ---@param self WorkTree
----@param buflines any
 ---@param cb any
-w.pr_open = function(self, buflines, cb)
-  self:merge(buflines)
+w.pr_open = function(self, cb)
+  cb = cb and cb or function() end
   local fetch = jobs.fetch(self.cwd)
   local push = jobs.push(self.name, self.cwd)
   local fork = jobs.repo_fork(self.cwd)
@@ -179,6 +146,47 @@ w.pr_open = function(self, buflines, cb)
   fetch:start()
 
   self.has_pr = true
+end
+
+---Squash and merge branch to target.
+--TODO: should delete branch automatically
+---@param self WorkTree
+---@param target string
+w.merge = function(self, target)
+  local checkout = jobs.checkout(target, self.cwd)
+  local merge = jobs.merge(self.name, self.cwd)
+  local commit = jobs.commit(self.title, self.body, self.cwd)
+
+  checkout:and_then_on_success(merge)
+  merge:and_then_on_success(commit)
+  commit:after_success(function()
+    print("Squashed and merged successfully to " .. target)
+  end)
+
+  checkout:start()
+end
+
+---@param arg string[]
+---@param cwd string @current working directory to repo
+---@overload fun(self: WorkTree, name: string, cwd: string): WorkTree
+---@return WorkTree
+w.new = function(self, arg, cwd, typeinfo)
+  local o = { cwd = cwd }
+
+  if type(arg) == "table" then
+    local p = self:parse(arg, typeinfo)
+    o.name, o.title, o.body, o.type = p.name, p.title, p.body, p.type
+  end
+
+  if type(arg) == "string" then
+    o.name = arg == "current" and jobs.get_name(cwd):sync()[1] or arg
+    o.title = fmt.into_title(o.name)
+    o.body = jobs.get_description(o.name, cwd):sync()
+  end
+
+  o.has_pr = jobs.has_remote(o.name, o.cwd)
+
+  return setmetatable(o, self)
 end
 
 return w

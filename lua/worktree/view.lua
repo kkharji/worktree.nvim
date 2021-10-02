@@ -20,8 +20,9 @@ view.create = function(typeinfo, cwd)
   }
 end
 
-view.edit = function(name, cwd)
-  local worktree = Worktree:new(name and name or "current", cwd)
+view.edit = function(branch_name, cwd)
+  local name = branch_name and branch_name or "current"
+  local worktree = Worktree:new(name, cwd)
   Win {
     heading = "Edit Branch Details", -- if info.ispr, change to Edit PR
     content = worktree:as_buffer_content(),
@@ -30,13 +31,14 @@ view.edit = function(name, cwd)
       if abort then
         return
       end
-      worktree:merge(content)
+      worktree:update(content)
     end,
   }
 end
 
-view.pr_open = function(name, cwd)
-  local worktree = Worktree:new(name and name or "current", cwd)
+view.pr_open = function(branch_name, cwd)
+  local name = branch_name and branch_name or "current"
+  local worktree = Worktree:new(name, cwd)
   Win {
     heading = "New Pull Request",
     content = worktree:as_buffer_content(),
@@ -47,7 +49,28 @@ view.pr_open = function(name, cwd)
     },
     on_exit = function(_, abort, content)
       if not abort then
-        worktree:pr_open(content)
+        worktree:update(content)
+        worktree:pr_open()
+      end
+    end,
+  }
+end
+
+view.squash_and_merge = function(branch_name, target, cwd)
+  local name = branch_name and branch_name or "current"
+  local worktree = Worktree:new(name, cwd)
+  Win {
+    heading = "Squash and Merge",
+    content = worktree:as_buffer_content(),
+    config = {
+      insert = false,
+      move = { { 1, 9 } },
+      height = "55%",
+    },
+    on_exit = function(_, abort, content)
+      if not abort then
+        worktree:update(content)
+        worktree:merge(target)
       end
     end,
   }

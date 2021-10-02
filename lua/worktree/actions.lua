@@ -26,4 +26,8 @@ actions.pr_open = function(name, cwd)
   view.pr_open(name, cwd)
 end
 
+actions.squash_and_merge = function(branch, target, cwd)
+  view.squash_and_merge(nil, target or "master", cwd or vim.loop.cwd())
+end
+
 return actions
