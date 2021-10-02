@@ -55,7 +55,7 @@ w.parse = function(_, bufferlines, typeinfo)
   end
   p.type = typeinfo
   p.name = fmt.into_name(p.title)
-  p.body = vim.trim(table.concat(vim.list_slice(bufferlines, 3, #bufferlines), "\n"))
+  p.body = vim.trim(table.concat(vim.list_slice(bufferlines, 2, #bufferlines), "\n"))
   return p
 end
 
