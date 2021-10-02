@@ -20,14 +20,6 @@ view.create = function(typeinfo, cwd)
   }
 end
 
--- #### Issues
-
--- - [ ] If no origin, creating branches fails
--- - [ ] Edit branch details doesn't have description.
--- - [ ] remove requiring extra space between branch title and body
-
--- #### Todos
-
 view.edit = function(name, cwd)
   local worktree = Worktree:new(name and name or "current", cwd)
   Win {
