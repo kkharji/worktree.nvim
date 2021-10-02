@@ -122,12 +122,16 @@ end
 w.create = function(self, cb)
   local base = "master" -- TODO: base can be either main or master
   local checkout = jobs.checkout(base, self.cwd)
+  local has_orign = jobs.has_orign(self.cwd)
   local merge = jobs.merge(base, self.cwd)
   local new = jobs.checkout(self.name, self.cwd)
   local describe = jobs.set_description(self.name, self.body, self.cwd)
 
-  checkout:and_then_on_success(merge)
+  checkout:and_then_on_success(has_orign)
+  has_orign:and_then_on_success(merge)
   merge:and_then_on_success(new)
+  has_orign:and_then_on_failure(new)
+
   new:and_then_on_success(describe)
   describe:after_success(function()
     print(string.format("created '%s' and switched to it", self.name))
