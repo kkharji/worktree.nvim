@@ -43,8 +43,15 @@ end
 w.parse = function(_, bufferlines, typeinfo)
   local p = {}
   p.title = bufferlines[1]:gsub("# ", "")
+
   if typeinfo then
-    p.title = typeinfo.name:lower() .. ": " .. p.title
+    local type = typeinfo.name:lower()
+    if p.title:match ":" then
+      local parts = vim.split(p.title, ":")
+      p.title = string.format("%s(%s): %s", type, parts[1], parts[2])
+    else
+      p.title = type .. ": " .. p.title
+    end
   end
   p.type = typeinfo
   p.name = fmt.into_name(p.title)
