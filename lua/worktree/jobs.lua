@@ -36,6 +36,9 @@ jobs.iserr = function(code, type)
   return false
 end
 
+jobs.has_orign = function(cwd)
+  return Job { "git", "config", "remote.upstream.url", cwd = cwd }
+end
 jobs.get_remote = function(cwd)
   local remote = "origin"
   local args = { "git", "config", "remote.upstream.url", cwd = cwd, sync = true }
