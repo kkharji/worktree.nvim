@@ -89,13 +89,11 @@ w.merge = function(self, buflines, cb)
   self.body = diff.body and change.body or self.body
 
   if self.has_pr then
-    jobs
-      :pr_update({
-        title = diff.title and self.title or nil,
-        body = diff.body and self.body or nil,
-        cb = cb,
-      })
-      :start()
+    jobs.pr_update({
+      title = diff.title and self.title or nil,
+      body = diff.body and self.body or nil,
+      cb = cb,
+    }):start()
   else
     (cb or function() end)()
   end

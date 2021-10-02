@@ -19,7 +19,7 @@ util.notify = function(msgs)
     local args = { ... }
     return vim.schedule_wrap(function(j, code)
       if code ~= 0 and group[1] then
-        args[#args + 1] = table.concat(j:stderr_result(), "\n")
+        args[#args + 1] = I(vim.inspect(j:stderr_result(), "\n"))
         vim.api.nvim_echo({ { tostr(group[1], unpack(args)), "WarningMsg" } }, true, {})
       elseif group[2] then
         vim.api.nvim_echo({ { tostr(group[2], unpack(args)), "healthSuccess" } }, true, {})
