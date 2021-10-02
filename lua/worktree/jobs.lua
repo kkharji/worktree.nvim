@@ -197,7 +197,9 @@ jobs.pr_update = function(fields, cwd)
     end
   end))
   start:and_then_on_success(update)
-  update:after_success(vim.schedule_wrap(cb))
+  if cb then
+    update:after_success(vim.schedule_wrap(cb))
+  end
 
   return start
 end
