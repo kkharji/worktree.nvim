@@ -13,7 +13,7 @@ local maker = require("telescope.pickers.entry_display").create
 local dropdown, commit_choices
 
 if user then
-  dropdown = user.pack.telescope.themes.minimal()
+  dropdown = user.pack.telescope.themes.minimal
   commit_choices = user.vars.commit_choices
 else
   return {}
@@ -22,7 +22,8 @@ end
 -- TODO: read a list of branch types and their template either using a user
 --- defined function or default sample. Skip reading from old dotfiles.
 M.pick_branch_type = function(title, cb)
-  picker(dropdown, {
+  local dd = dropdown { layout_config = { width = 0.4, height = 0.3 } }
+  picker(dd, {
     prompt_prefix = title,
     finder = finder {
       results = commit_choices(),
@@ -59,6 +60,46 @@ M.pick_branch_type = function(title, cb)
           end)
         end
       end
+
+      return true
+    end,
+  }):find()
+end
+
+---Pick branch merge type
+---@param cb any
+M.pick_branch_merge_type = function(cb)
+  local dd = dropdown { layout_config = { width = 0.3, height = 0.2 } }
+  picker(dd, {
+    prompt_prefix = "Pick merge type> ",
+    sorter = sorter {},
+    finder = finder {
+      results = {
+        { type = "squash", description = "squash commits to one commit." },
+        { type = "merge", description = "rebase with a merge commit." },
+        { type = "rebase", description = "rebase and add this branch into the base branch" },
+      },
+      entry_maker = function(entry)
+        entry.ordinal = entry.type
+        entry.display = function(e)
+          return maker {
+            separator = " ",
+            hl_chars = { ["|"] = "TelescopeResultsNumber" },
+            items = { { width = 12 }, { remaining = true } },
+          } {
+            { e.type, "TelescopeResultsNumber" },
+            { e.description, "TelescopeResultsMethod" },
+          }
+        end
+
+        return entry
+      end,
+    },
+    attach_mappings = function()
+      a.select_default:replace(function(bufnr)
+        a.close(bufnr)
+        return cb(s.get_selected_entry())
+      end)
 
       return true
     end,
