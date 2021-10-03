@@ -10,7 +10,7 @@ local fmt = require "worktree.fmt"
 ---@field cwd string
 local w = {
   exists = function(self)
-    return jobs.is_branch(self.name, self.cwd()):sync()
+    return jobs.assert.is_branch(self.name, self.cwd()):sync()
   end,
 }
 
@@ -32,8 +32,9 @@ end
 ---@param bufferlines string[]
 ---@return WorkTree
 w.parse = function(_, bufferlines, typeinfo)
-  local p = {}
-  p.title = bufferlines[1]:gsub("# ", "")
+  local p = {
+    title = bufferlines[1]:gsub("# ", "")
+  }
 
   if typeinfo then
     local type = typeinfo.name:lower()
@@ -44,6 +45,7 @@ w.parse = function(_, bufferlines, typeinfo)
       p.title = type .. ": " .. p.title
     end
   end
+
   p.type = typeinfo
   p.name = fmt.into_name(p.title)
   p.body = vim.trim(table.concat(vim.list_slice(bufferlines, 2, #bufferlines), "\n"))
@@ -69,10 +71,10 @@ w.update = function(self, buflines, cb)
   diff.body = self.body ~= change.body
 
   if diff.name then
-    jobs.set_name(self.name, change.name, self.cwd):sync()
+    jobs.set.name(self.name, change.name, self.cwd):sync()
   end
   if diff.body then
-    jobs.set_description(self.name, change.body, self.cwd):sync()
+    jobs.set.description(self.name, change.body, self.cwd):sync()
   end
 
   self.name = diff.name and change.name or self.name
@@ -80,7 +82,7 @@ w.update = function(self, buflines, cb)
   self.body = diff.body and change.body or self.body
 
   if self.has_pr then
-    jobs.pr_update({
+    jobs.set.pr_info({
       title = diff.title and self.title or nil,
       body = diff.body and self.body or nil,
       cb = cb,
@@ -92,25 +94,36 @@ end
 
 ---Create new branch through checking out master, merging recent remote,
 ---checking out the new branch out of base and lastly set description
-w.create = function(self, cb)
-  local base = "master" -- TODO: base can be either main or master
-  local checkout = jobs.checkout(base, self.cwd)
-  local has_orign = jobs.has_orign(self.cwd)
-  local merge = jobs.merge_remote(base, self.cwd)
-  local new = jobs.checkout(self.name, self.cwd)
-  local describe = jobs.set_description(self.name, self.body, self.cwd)
+w.create = function(self, cb) -- TODO: support creating for other than default branch
+  local has_remote = jobs.assert.has_remote(self.cwd)
+  local base = jobs.get.default_branch_name(has_remote, self.cwd)
 
-  checkout:and_then_on_success(has_orign)
-  has_orign:and_then_on_success(merge)
-  merge:and_then_on_success(new)
-  has_orign:and_then_on_failure(new)
+
+  local checkout = jobs.perform.checkout(base, self.cwd)
+  local merge = jobs.perform.merge_remote(base, self.cwd)
+  local new = jobs.perform.checkout(self.name, self.cwd)
+  local describe = jobs.set.description(self.name, self.body, self.cwd)
+
+    checkout:after_failure(function ()
+      print("checkout failed")
+    end)
+
+
+  if has_remote then
+    checkout:and_then_on_success(merge)
+    merge:and_then_on_success(new)
+    merge:after_failure(function ()
+      print("merge failed")
+    end)
+  else
+  --- FIXME: doesn't create branch after here
+    checkout:and_then_on_success(new)
+  end
 
   new:and_then_on_success(describe)
   describe:after_success(function()
-    print(string.format("created '%s' and switched to it", self.name))
-    if cb then
-      cb()
-    end
+    print(string.format("created '%s' and switched to it", self.name));
+    (cb or function() end)()
   end)
 
   checkout:start()
@@ -121,22 +134,21 @@ end
 ---@param cb any
 w.pr_open = function(self, cb)
   cb = cb and cb or function() end
-  local fetch = jobs.fetch(self.cwd)
-  local push = jobs.push(self.name, self.cwd)
-  local fork = jobs.repo_fork(self.cwd)
-  local create = jobs.pr_open(self.title, self.body, self.cwd)
+  local fetch = jobs.perform.fetch(self.cwd)
+  local push = jobs.perform.push(self.name, self.cwd)
+  local fork = jobs.perform.fork(self.cwd)
+  local create = jobs.perform.pr_open(self.title, self.body, self.cwd)
 
   --- Make sure remote branches are recognized locally.
   fetch:and_then_on_success(push)
 
-  push:after_success(function()
-    print "Done pushing local repo"
-    create:after(cb):start()
-  end)
+  push:and_then_on_success(create)
+  create:after(cb)
 
   push:after_failure(function()
     print "No write access, forking and creating pr instead ..."
     fork:and_then_on_success(create)
+    create:after(cb)
     fork:after_failure(function()
       error "Failed to fork repo ..."
     end)
@@ -152,17 +164,12 @@ end
 --TODO: should delete branch automatically
 ---@param self WorkTree
 ---@param target string
-w.merge = function(self, target)
-  local checkout = jobs.checkout(target, self.cwd)
-  local merge = jobs.merge(self.name, self.cwd)
-  local commit = jobs.commit(self.title, self.body, self.cwd)
-
+w.squash_and_merge = function(self, target)
+  local checkout = jobs.perform.checkout(target, self.cwd)
+  local merge = jobs.perform.squash_and_merge(self.name, self.cwd)
+  local commit = jobs.perform.commit(self.title, self.body, self.cwd)
   checkout:and_then_on_success(merge)
   merge:and_then_on_success(commit)
-  commit:after_success(function()
-    print("Squashed and merged successfully to " .. target)
-  end)
-
   checkout:start()
 end
 
@@ -179,12 +186,12 @@ w.new = function(self, arg, cwd, typeinfo)
   end
 
   if type(arg) == "string" then
-    o.name = arg == "current" and jobs.get_name(cwd):sync()[1] or arg
+    o.name = arg == "current" and jobs.get.name(cwd):sync()[1] or arg
     o.title = fmt.into_title(o.name)
-    o.body = jobs.get_description(o.name, cwd):sync()
+    o.body = jobs.get.description(o.name, cwd):sync()
   end
 
-  o.has_pr = jobs.has_remote(o.name, o.cwd)
+  o.has_pr = jobs.assert.has_origin_version(o.name, o.cwd)
 
   return setmetatable(o, self)
 end

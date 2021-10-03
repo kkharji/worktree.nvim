@@ -19,6 +19,8 @@ else
   return {}
 end
 
+-- TODO: read a list of branch types and their template either using a user
+--- defined function or default sample. Skip reading from old dotfiles.
 M.pick_branch_type = function(title, cb)
   picker(dropdown, {
     prompt_prefix = title,
