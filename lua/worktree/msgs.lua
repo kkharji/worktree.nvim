@@ -1,56 +1,52 @@
 local M = {}
 
 M.checkout = {
-  err = "Failed to checkout/create %s: %s",
-  pass = "checked out/created %s",
+  err = "Failed to checkout/create branch",
+  pass = "checked out/created a new branch",
 }
 
 M.merge_remote = {
-  err = "Failed to merge %s/%s/: %s",
+  err = "Failed to merge remote version of given or default branch",
 }
 
-M.squash_and_merge = {
-  err = "Failed to squash and merge %s: %s",
-  pass = "Squashed and merged successfully %s",
+M.squash = {
+  err = "Failed to squash and merge",
+  pass = "Squashed and merged successfully",
+}
+M.merge = {
+  err = "Failed to merge and create merge commit",
+  pass = "merged with merge commit successfully",
+}
+
+M.rebase = {
+  err = "Failed to rebase and merge commit to target branch",
+  pass = "Rebased and merged successfully to target branch",
 }
 
 M.get_name = {
-  err = "Failed to get current branch name of %s: %s",
+  err = "Failed to get current branch name",
 }
 
 M.get_description = {
-  err = "Creating new Description ..",
+  err = "no description found, creating a new description ..",
+  highlight_as_normal = true,
 }
 
 M.set_name = {
-  err = "Failed to update name from '%s' to '%s': %s",
-  pass = "Updated branch name from '%s' to '%s'",
+  err = "Failed to update name",
+  pass = "Updated branch name",
 }
 
 M.set_description = {
-  err = "Failed to update branch description to %s: %s",
-}
-
-M.pr_open = {
-  err = "Failed to create a pull request: %s",
-  pass = "pull request has been created successfully.",
-}
-
-M.pr_info = {
-  err = "Failed to get pr info for %s: ",
-}
-
-M.pr_update = {
-  err = "Failed to sync pr info for %s: ",
-  pass = "PR is synced successfully",
+  err = "Failed to update branch description",
 }
 
 M.sync_current_info = {
-  err = "Failed to sync branch/pr info for %s: ",
+  err = "Failed to sync branch/pr info",
 }
 
 M.get_current_info = {
-  err = "Failed to get branch/pr info for %s: ",
+  err = "Failed to get branch/pr info ",
 }
 
 M.offline_save = {
@@ -59,48 +55,58 @@ M.offline_save = {
 }
 
 M.push = {
-  err = "Failed to push %s to remote: %s",
-  pass = "Pushed %s successfully to remote ..."
+  err = "Failed to push %s to remote",
+  pass = "Pushed %s successfully to remote ...",
 }
 
 M.fork = {
-  err = "Failed to fork %s: %s.",
-  pass = "Forked %s successfully."
+  err = "Failed to fork",
+  pass = "Forked %s successfully.",
 }
 
-local tostr = function(msg, ...)
-  local args = { ... }
-  local count = select(2, msg:gsub("%%s", ""))
-  if count ~= #args and count > #args then
-    while count ~= #args do
-      table.insert(args, "")
-    end
-  end
-  return string.format(msg, unpack(args))
-end
+M.pr_open = {
+  err = "Failed to create a pull request",
+  pass = "pull request has been created successfully.",
+}
 
---- TODO: use notify.nvim
-local construct = function(msgs)
-  return function(job_type, ...)
-    local group = msgs[job_type]
-    local args = { ... }
-    return vim.schedule_wrap(function(j, code)
-      if code ~= 0 and group.err then
-        args[#args + 1] = table.concat(j:stderr_result(), "\n")
-        vim.api.nvim_echo({ { tostr(group.err, unpack(args)), "WarningMsg" } }, true, {})
-      elseif group[2] then
-        vim.api.nvim_echo({ { tostr(group.pass, unpack(args)), "healthSuccess" } }, true, {})
+M.pr_info = {
+  err = "Failed to get pr info",
+}
+
+M.pr_squash = {
+  err = "Failed to squash and merge using github-cli",
+  pass = "Squashed and merged successfully using github-cli.",
+}
+
+M.pr_rebase = {
+  err = "Failed to rebase and merge using github-cli",
+  pass = "Successfully rebased using github-cli.",
+}
+
+M.pr_update = {
+  err = "Failed to sync pr info for",
+  pass = "PR is synced successfully",
+}
+
+M.pr_merge = {
+  err = "Failed to merge and create merge commit using github-cli",
+  pass = "Successfully merged and rebased with merge commit using github-cli.",
+}
+
+for key, group in pairs(M) do
+  M[key] = vim.schedule_wrap(function(j, code, _)
+    if code == 0 and group.pass then
+      return vim.api.nvim_echo({ { group.pass, "healthSuccess" } }, true, {})
+    elseif code ~= 0 and group.err then
+      local msg = group.err
+      local highlight = "WarningMsg"
+      if not group.highlight_as_normal then
+        msg = msg .. ": " .. table.concat(j:stderr_result(), "\n")
+        highlight = "normal"
       end
-    end)
-  end
+      vim.api.nvim_echo({ { msg, highlight } }, true, {})
+    end
+  end)
 end
 
-local notify = construct(M)
-
-return setmetatable({}, {
-  __index = function(_, key)
-    return function(...)
-      return notify(key, ...)
-    end
-  end,
-})
+return M
