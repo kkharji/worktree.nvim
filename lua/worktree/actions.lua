@@ -1,5 +1,6 @@
 local msgs = require "worktree.msgs"
 local fmt = require "worktree.fmt"
+local menu = require "worktree.menu"
 R "worktree.fmt"
 local M = {}
 
@@ -428,6 +429,36 @@ perform.pr_merge = function(body, cwd)
   return Job(args)
 end
 
-picker.delete_branch = function(entry, cwd) end
+perform.delete = function(name, current, cwd)
+  --- switch to default branch --maybe use switch?
+  if current then
+    perform.checkout(get.default_branch_name(true, cwd)):sync()
+  end
+  local job = Job { "git", "branch", "-D", name, cwd = cwd, on_exit = msgs.delete }
+  job:sync()
+end
+
+M.picker = {}
+local picker = M.picker
+
+picker.delete_branch = function(entry, cwd)
+  menu {
+    heading = "Delete " .. entry.subject .. "?",
+    size = { 3, 30 },
+    align_choice = "center",
+    choices = {
+      { text = "Yes", delete = true },
+      { text = "No", delete = false },
+    },
+    on_close = function(_, choice)
+      if choice == nil or not choice.delete then
+        return
+      end
+      perform.delete(entry.name, entry.current, cwd)
+    end,
+  }
+end
+
+-- picker.delete_branch { subject = "hello world" }
 
 return M

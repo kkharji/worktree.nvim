@@ -12,6 +12,7 @@ M.squash = {
   err = "Failed to squash and merge",
   pass = "Squashed and merged successfully",
 }
+
 M.merge = {
   err = "Failed to merge and create merge commit",
   pass = "merged with merge commit successfully",
@@ -90,6 +91,11 @@ M.pr_update = {
 M.pr_merge = {
   err = "Failed to merge and create merge commit using github-cli",
   pass = "Successfully merged and rebased with merge commit using github-cli.",
+}
+
+M.delete = {
+  err = "Fail to delete branch",
+  pass = "Branch is deleted successfully",
 }
 
 for key, group in pairs(M) do

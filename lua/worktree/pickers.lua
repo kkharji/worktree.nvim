@@ -14,7 +14,7 @@ local get = require("worktree.actions").get
 local dropdown, commit_choices
 
 if user then
-  dropdown = user.pack.telescope.themes.minimal
+  dropdown = user.pack.telescope.themes.minimal({ layout_config = { width = 0.4, height = 0.2 } })
   commit_choices = user.vars.commit_choices
 else
   return {}
@@ -23,8 +23,8 @@ end
 -- TODO: read a list of branch types and their template either using a user
 --- defined function or default sample. Skip reading from old dotfiles.
 M.pick_branch_type = function(title, cb)
-  local dd = dropdown { layout_config = { width = 0.4, height = 0.3 } }
-  picker(dd, {
+  -- local dd = dropdown { layout_config = { width = 0.4, height = 0.3 } }
+  picker(dropdown, {
     prompt_prefix = title,
     finder = finder {
       results = commit_choices(),
@@ -70,8 +70,8 @@ end
 ---Pick branch merge type
 ---@param cb any
 M.pick_branch_merge_type = function(cb)
-  local dd = dropdown { layout_config = { width = 0.3, height = 0.2 } }
-  picker(dd, {
+  -- local dd = dropdown { layout_config = { width = 0.3, height = 0.2 } }
+  picker(dropdown, {
     prompt_prefix = "Pick merge type> ",
     sorter = sorter {},
     finder = finder {
@@ -88,7 +88,7 @@ M.pick_branch_merge_type = function(cb)
             hl_chars = { ["|"] = "TelescopeResultsNumber" },
             items = { { width = 12 }, { remaining = true } },
           } {
-            { e.type, "TelescopeResultsNumber" },
+            { e.type, "TSTag" },
             { e.description, "TelescopeResultsMethod" },
           }
         end
@@ -110,19 +110,19 @@ end
 local actions = require "worktree.actions"
 
 M.switcher = function(cb)
-  local dd = dropdown { layout_config = { width = 0.4, height = 0.2 } }
+  -- local dd = dropdown { layout_config = { width = 0.4, height = 0.2 } }
   local parts = vim.split(vim.loop.cwd(), "/")
   local name = parts[#parts]
   local cwd = vim.loop.cwd()
 
-  picker(dd, {
+  picker(dropdown, {
     prompt_prefix = name .. " > ",
     sorter = sorter {},
     attach_mappings = function(_, map)
       --- C-d delete branch, confirm delete action using menu
-      map("n", "C-d", function(bufnr)
+      map("n", "<C-d>", function(bufnr)
         local entry = s.get_selected_entry()
-        return actions.picker.delete_branch(entry, cwd)
+        actions.picker.delete_branch(entry, cwd)
       end)
       --- C-s select merge strategy and target branch to merge into
       map("n", "C-s")
@@ -135,6 +135,7 @@ M.switcher = function(cb)
       --   a.close(bufnr)
       --   return cb(s.get_selected_entry())
       -- end)
+      return true
     end,
     finder = finder {
       results = get.branches(vim.loop.cwd()),
