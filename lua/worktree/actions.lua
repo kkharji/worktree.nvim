@@ -428,4 +428,6 @@ perform.pr_merge = function(body, cwd)
   return Job(args)
 end
 
+picker.delete_branch = function(entry, cwd) end
+
 return M

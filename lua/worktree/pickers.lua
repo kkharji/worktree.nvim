@@ -107,26 +107,48 @@ M.pick_branch_merge_type = function(cb)
   }):find()
 end
 
---- TODO: Make switching between branches more ergonomic, i.g.
+local actions = require "worktree.actions"
+
 M.switcher = function(cb)
   local dd = dropdown { layout_config = { width = 0.4, height = 0.2 } }
+  local parts = vim.split(vim.loop.cwd(), "/")
+  local name = parts[#parts]
+  local cwd = vim.loop.cwd()
+
   picker(dd, {
-    prompt_prefix = "Git Branches > ",
+    prompt_prefix = name .. " > ",
     sorter = sorter {},
+    attach_mappings = function(_, map)
+      --- C-d delete branch, confirm delete action using menu
+      map("n", "C-d", function(bufnr)
+        local entry = s.get_selected_entry()
+        return actions.picker.delete_branch(entry, cwd)
+      end)
+      --- C-s select merge strategy and target branch to merge into
+      map("n", "C-s")
+      --- C-e edit branch description or create new one with the given name, select type later
+      map("n", "C-e")
+      --- <CR> switch, stash if there are changes and popup back when returning to the branch
+      --- TODO find out how git stash works
+      map("n", "<CR>")
+      -- a.select_default:replace(function(bufnr)
+      --   a.close(bufnr)
+      --   return cb(s.get_selected_entry())
+      -- end)
+    end,
     finder = finder {
       results = get.branches(vim.loop.cwd()),
       entry_maker = function(entry)
-        entry.ordinal = entry.title
+        entry.ordinal = entry.name
         entry.display = function(e)
           return maker {
             separator = " ",
             hl_chars = { ["|"] = "TelescopeResultsNumber" },
-            items = { { width = 10 }, { width = 10 }, { width = 40 }, { remaining = true } },
+            items = { { width = 40 }, { width = 20 }, { remaining = true } },
           } {
-            { e.type, "TelescopeResultsMethod" },
-            { e.scope, "TelescopeResultsMethod" },
-            { e.subject, "TelescopeResultsMethod" },
-            { e.since, "TelescopeResultsNumber" },
+            { e.subject, e.current and "TSLabel" or "TelescopeResultsMethod" },
+            { e.scope, "TSTag" },
+            { e.since, "TSComment" },
           }
         end
         return entry

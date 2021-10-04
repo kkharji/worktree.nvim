@@ -74,8 +74,7 @@ fmt.parse_branch_info_line = function(line)
   entry.name = string.sub(entry.refname, string.len(prefix) + 1)
   entry.title = fmt.into_title(entry.name)
   entry.subject = fmt.get_subject(entry.title) or entry.title
-  entry.scope = fmt.get_scope(entry.title) or "*"
-  entry.type = fmt.get_type(entry.title) or "none"
+  entry.scope = (fmt.get_type(entry.title) or "none") .. "/" .. (fmt.get_scope(entry.title) or "*")
   entry.current = entry.head == "*"
 
   return entry
