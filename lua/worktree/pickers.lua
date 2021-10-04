@@ -108,15 +108,7 @@ M.pick_branch_merge_type = function(cb)
 end
 
 --- TODO: Make switching between branches more ergonomic, i.g.
--- - If a branch has uncommited changes then stash them and find a way to stash them back on revisit.
--- - Show branch name as titles.
--- - Show relative time to when it was changed/created.
--- - Be able to delete them without closing picker
--- - Merge selected with all the policies support to current branch
--- - Create new branch
--- - Push or create a pr for selected one
--- - Toggle preview of branch description
-M.switch_to_another_branch = function(cb)
+M.switcher = function(cb)
   local dd = dropdown { layout_config = { width = 0.4, height = 0.2 } }
   picker(dd, {
     prompt_prefix = "Git Branches > ",
@@ -143,6 +135,6 @@ M.switch_to_another_branch = function(cb)
   }):find()
 end
 
-M.switch_to_another_branch()
+M.switcher()
 
 return M
