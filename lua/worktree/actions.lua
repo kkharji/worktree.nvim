@@ -177,10 +177,9 @@ local perform = M.perform
 --TODO: make it skip if not remote branch
 ---@param cwd string
 ---@return Job
-perform.merge_remote = function(cwd)
+perform.merge_remote = function(base, cwd)
   local remote_name = get.remote_name(cwd)
-  local base_branch = get.default_branch_name(false, cwd)
-  local args = { "git", "merge", remote_name .. "/" .. base_branch, cwd = cwd }
+  local args = { "git", "merge", remote_name .. "/" .. base, cwd = cwd }
   args.on_exit = msgs.merge_remote
   return Job(args)
 end

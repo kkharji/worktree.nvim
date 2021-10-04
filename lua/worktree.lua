@@ -22,7 +22,7 @@ M.create = function(cwd)
           return
         end
         --- TODO: make choices configured in config.lua
-        Worktree:new(title, cwd, choice):create(choice.template or Worktree:template())
+        Worktree:new(title, cwd, choice):create(choice.template)
       end,
     }
   end)

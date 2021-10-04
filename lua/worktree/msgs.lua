@@ -2,7 +2,6 @@ local M = {}
 
 M.checkout = {
   err = "Failed to checkout/create a given branch",
-  pass = "checked out/created a new branch",
 }
 
 M.merge_remote = {
@@ -96,7 +95,7 @@ M.pr_merge = {
 for key, group in pairs(M) do
   M[key] = vim.schedule_wrap(function(j, code, _)
     if code == 0 and group.pass then
-      return vim.api.nvim_echo({ { group.pass, "healthSuccess" } }, true, {})
+      vim.api.nvim_echo({ { group.pass, "healthSuccess" } }, true, {})
     elseif code ~= 0 and group.err then
       local msg = group.err
       local highlight = "WarningMsg"

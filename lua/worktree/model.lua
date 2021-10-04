@@ -11,8 +11,8 @@ local fmt = require "worktree.fmt"
 ---@field cwd string
 local Worktree = {}
 
-Worktree.exists = function(self)
-  return assert.is_branch(self.name, self.cwd):sync()
+Worktree.exists = function(self, name)
+  return assert.is_branch(name and name or self.name, self.cwd):sync()
 end
 
 Worktree.__index = Worktree
@@ -25,20 +25,33 @@ end
 
 ---Format with a given branch choice
 ---@return string[]
-Worktree.template = function(_)
-  return { "# ", "", "#### Purpose", "" }
+Worktree.template = function(_, without_title_placeholder)
+  local args = {}
+  if not without_title_placeholder then
+    args[#args + 1] = "# "
+    args[#args + 1] = ""
+  end
+  args[#args + 1] = "#### Purpose"
+  args[#args + 1] = ""
+  return args
 end
 
 ---Parse bufferline to {title, name, body}
 ---@param bufferlines string[]
 ---@return WorkTree
-Worktree.parse = function(_, bufferlines, typeinfo)
-  local p = {
-    title = bufferlines[1]:gsub("# ", ""),
-  }
+Worktree.parse = function(self, bufferlines)
+  local p = {}
 
-  if typeinfo then
-    local type = typeinfo.name:lower()
+  if type(bufferlines) == "string" then
+    local str = bufferlines
+    p.title = str == "current" and fmt.into_title(get.name(self.cwd):sync()[1]) or str
+  elseif type(bufferlines) == "table" then
+    p.title = bufferlines[1]:gsub("# ", "")
+    p.body = vim.trim(table.concat(vim.list_slice(bufferlines, 2, #bufferlines), "\n"))
+  end
+
+  if self.type then
+    local type = self.type.name:lower()
     if p.title:match ":" then
       local parts = vim.split(p.title, ":")
       p.title = string.format("%s(%s): %s", type, parts[1], parts[2])
@@ -47,9 +60,13 @@ Worktree.parse = function(_, bufferlines, typeinfo)
     end
   end
 
-  p.type = typeinfo
+  p.type = self.type
   p.name = fmt.into_name(p.title)
-  p.body = vim.trim(table.concat(vim.list_slice(bufferlines, 2, #bufferlines), "\n"))
+
+  if type(bufferlines) == "string" and self:exists(p.name) then
+    p.body = get.description(p.name, self.cwd):sync()
+  end
+
   return p
 end
 
@@ -71,11 +88,12 @@ Worktree.update = function(self, buflines, cb)
   diff.title = self.title ~= change.title
   diff.body = self.body ~= change.body
 
+  --- TOOD: check for invalid names and body, like empty?
   if diff.name then
     set.name(self.name, change.name, self.cwd):sync()
   end
   if diff.body then
-    set.description(self.name, change.body, self.cwd):sync()
+    set.description(change.name, change.body, self.cwd):sync()
   end
 
   self.name = diff.name and change.name or self.name
@@ -96,13 +114,14 @@ end
 ---Create new branch through checking out master, merging recent remote,
 ---checking out the new branch out of base and lastly set description
 Worktree.create = function(self, body) -- TODO: support creating for other than default branch
+  body = body and body or self:template(true)
   local has_remote = assert.has_remote(self.cwd)
   local base = get.default_branch_name(has_remote, self.cwd)
 
   local checkout = perform.checkout(base, self.cwd)
-  local merge = perform.merge_remote(self.cwd)
+  local merge = perform.merge_remote(base, self.cwd)
   local new = perform.checkout(self.name, self.cwd)
-  local describe = set.description(self.name, body and body or self.body, self.cwd)
+  local describe = set.description(self.name, table.concat(body, "\n"), self.cwd)
 
   checkout:after_failure()
 
@@ -110,7 +129,6 @@ Worktree.create = function(self, body) -- TODO: support creating for other than 
     checkout:and_then_on_success(merge)
     merge:and_then_on_success(new)
   else
-    --- FIXME: doesn't create branch after here
     checkout:and_then_on_success(new)
   end
 
@@ -228,30 +246,10 @@ end
 ---@overload fun(self: WorkTree, name: string, cwd: string): WorkTree
 ---@return WorkTree
 Worktree.new = function(self, arg, cwd, typeinfo)
-  local o = setmetatable({ cwd = cwd }, self)
-
-  if type(arg) == "table" then
-    local p = self:parse(arg, typeinfo)
-    o.name, o.title, o.body, o.type = p.name, p.title, p.body, p.type
-  end
-
-  if type(arg) == "string" then
-    o.name = arg == "current" and get.name(cwd):sync()[1] or arg
-    if o.name:match ":" then
-      o.title = o.name
-      o.name = fmt.into_name(o.title)
-    else
-      o.title = fmt.into_title(o.name)
-    end
-    if o:exists() then
-      o.body = get.description(o.name, cwd):sync()
-    else
-      o.body = { "", "" }
-    end
-  end
-
+  local o = setmetatable({ cwd = cwd, type = typeinfo }, self)
+  local p = o:parse(arg)
+  o.name, o.title, o.body = p.name, p.title, p.body
   o.has_pr = assert.has_origin_version(o.name, o.cwd)
-
   return o
 end
 
