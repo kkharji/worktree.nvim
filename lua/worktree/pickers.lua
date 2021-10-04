@@ -2,7 +2,7 @@ if not pcall(require, "telescope") then
   vim.cmd [[ echom 'Cannot load `telescope`' ]]
   return
 end
-
+R "worktree.actions"
 local M = {}
 local a = require "telescope.actions"
 local s = require "telescope.actions.state"
@@ -10,6 +10,7 @@ local finder = require("telescope.finders").new_table
 local picker = require("telescope.pickers").new
 local sorter = require("telescope.config").values.generic_sorter
 local maker = require("telescope.pickers.entry_display").create
+local get = require("worktree.actions").get
 local dropdown, commit_choices
 
 if user then
@@ -105,5 +106,43 @@ M.pick_branch_merge_type = function(cb)
     end,
   }):find()
 end
+
+--- TODO: Make switching between branches more ergonomic, i.g.
+-- - If a branch has uncommited changes then stash them and find a way to stash them back on revisit.
+-- - Show branch name as titles.
+-- - Show relative time to when it was changed/created.
+-- - Be able to delete them without closing picker
+-- - Merge selected with all the policies support to current branch
+-- - Create new branch
+-- - Push or create a pr for selected one
+-- - Toggle preview of branch description
+M.switch_to_another_branch = function(cb)
+  local dd = dropdown { layout_config = { width = 0.4, height = 0.2 } }
+  picker(dd, {
+    prompt_prefix = "Git Branches > ",
+    sorter = sorter {},
+    finder = finder {
+      results = get.branches(vim.loop.cwd()),
+      entry_maker = function(entry)
+        entry.ordinal = entry.title
+        entry.display = function(e)
+          return maker {
+            separator = " ",
+            hl_chars = { ["|"] = "TelescopeResultsNumber" },
+            items = { { width = 10 }, { width = 10 }, { width = 40 }, { remaining = true } },
+          } {
+            { e.type, "TelescopeResultsMethod" },
+            { e.scope, "TelescopeResultsMethod" },
+            { e.subject, "TelescopeResultsMethod" },
+            { e.since, "TelescopeResultsNumber" },
+          }
+        end
+        return entry
+      end,
+    },
+  }):find()
+end
+
+M.switch_to_another_branch()
 
 return M

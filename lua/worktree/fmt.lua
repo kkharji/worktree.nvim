@@ -1,4 +1,5 @@
 local fmt = {}
+local date = require "worktree.date"
 
 ---@param branch_name string
 ---@return string
@@ -30,6 +31,54 @@ end
 fmt.to_filename = function(branch_name)
   local as_title = fmt.into_title(branch_name)
   return as_title:gsub(" ", "_"):gsub("%(", ""):gsub("%)", ""):gsub(":", "_")
+end
+
+fmt.get_type = function(str)
+  return str:match "(%a+)%("
+end
+
+fmt.get_scope = function(str)
+  return str:match "%a+%((%a+)%)"
+end
+
+fmt.get_subject = function(str)
+  return str:match "%S+:%s+(%a+.*)"
+end
+-- I(fmt.get_subject "feat(create): set upstream-push")
+local unescape_single_quote = function(v)
+  return string.gsub(v, "\\([\\'])", "%1")
+end
+
+fmt.parse_branch_info_line = function(line)
+  local fields = vim.split(string.sub(line, 2, -2), "''", true)
+  local entry = {
+    head = fields[1],
+    refname = unescape_single_quote(fields[2]),
+    upstream = unescape_single_quote(fields[3]),
+    since = date.since(fields[4]),
+  }
+
+  if entry.upstream == "" then -- we don't want other stuff
+    return
+  end
+
+  local prefix
+  if vim.startswith(entry.refname, "refs/remotes/") then
+    prefix = "refs/remotes/"
+  elseif vim.startswith(entry.refname, "refs/heads/") then
+    prefix = "refs/heads/"
+  else
+    return
+  end
+
+  entry.name = string.sub(entry.refname, string.len(prefix) + 1)
+  entry.title = fmt.into_title(entry.name)
+  entry.subject = fmt.get_subject(entry.title) or entry.title
+  entry.scope = fmt.get_scope(entry.title) or "*"
+  entry.type = fmt.get_type(entry.title) or "none"
+  entry.current = entry.head == "*"
+
+  return entry
 end
 
 return fmt

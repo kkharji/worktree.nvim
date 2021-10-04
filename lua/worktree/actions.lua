@@ -1,5 +1,6 @@
 local msgs = require "worktree.msgs"
 local fmt = require "worktree.fmt"
+R "worktree.fmt"
 local M = {}
 
 ---TODO: refactor, move assert stuff to assert? and have three main sections of jobs: set, get, perform
@@ -14,6 +15,21 @@ end
 
 M.get = {}
 local get = M.get
+
+get.branches = function(cwd)
+  local format = "%(HEAD)"
+    .. "%(refname)"
+    .. "%(upstream:lstrip=2)"
+    .. "%(committerdate:format-local:%Y/%m/%d %H:%M:%S)"
+
+  local output, _ = Job { "git", "for-each-ref", "--perl", "--format", format, cwd = cwd, sync = true }
+  for i, line in ipairs(output) do
+    output[i] = fmt.parse_branch_info_line(line)
+  end
+  return output
+end
+
+-- I(get.branches(vim.loop.cwd()))
 
 ---Check whether a branch has a upstream/origin repo
 ---@param cwd string
@@ -94,28 +110,6 @@ get.default_branch_name = function(has_remote, cwd)
   end
 
   return default
-end
-
-get.branches = function(cwd)
-  local res = { { text = "Default", name = get.default_branch_name(false, cwd) } }
-  local output, _ = Job { "git", "branch", cwd = cwd, sync = true }
-  for _, branch in ipairs(output) do
-    branch = vim.trim(branch)
-    if branch:match "*" then
-      branch = vim.trim(branch:gsub("*", ""))
-      res[#res + 1] = {
-        current = true,
-        text = "Current",
-        name = branch,
-        title = fmt.into_title(branch),
-      }
-    elseif branch ~= "master" and branch ~= "name" then
-      local title = fmt.into_title(branch)
-      res[#res + 1] = { text = title, title = title, name = branch }
-    end
-  end
-
-  return res
 end
 
 M.set = {}
