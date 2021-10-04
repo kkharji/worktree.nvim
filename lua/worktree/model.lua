@@ -45,8 +45,8 @@ Worktree.parse = function(self, bufferlines)
   if type(bufferlines) == "string" then
     local str = bufferlines
     p.title = str == "current" and fmt.into_title(get.name(self.cwd):sync()[1]) or str
-  elseif type(bufferlines) == "table" then
-    p.title = bufferlines[1]:gsub("# ", "")
+  elseif type(bufferlines) == "table" and not vim.tbl_isempty(bufferlines) then
+    p.title = bufferlines[1] and bufferlines[1]:gsub("# ", "")
     p.body = vim.trim(table.concat(vim.list_slice(bufferlines, 2, #bufferlines), "\n"))
   end
 
@@ -138,11 +138,11 @@ Worktree.create = function(self, opts) -- TODO: support creating for other than 
   describe:after_success(function()
     print(string.format("created '%s' and switched to it", self.name))
   end)
-  describe:after_success(function()
+  describe:after_success(vim.schedule_wrap(function()
     if opts.cb then
       opts.cb(self)
     end
-  end)
+  end))
 
   checkout:start()
 end

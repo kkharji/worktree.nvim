@@ -9,12 +9,12 @@ end
 local Win = user.ui.float
 local M = {}
 
+--- TODO: make choices configured in config.lua
+
 ---Create new branch from current working directory
 ---@param cwd string @current working directory
 M.create = function(cwd)
   cwd = cwd or vim.loop.cwd()
-  --- TODO: Prompt only for name and then edit using M.edit
-  --- TODO: make choices configured in config.lua
   pickers.pick_branch_type("Pick Branch Type > ", function(typeinfo)
     Prompt {
       heading = typeinfo.prefix:gsub("^%l", string.upper) .. " Branch name (scope: name)",
@@ -28,8 +28,18 @@ M.create = function(cwd)
             wt:create {
               base = base and base.name or nil,
               body = typeinfo.template or Worktree:template(true),
-              cb = function(wt)
-                M.edit(wt.name, wt.cwd)
+              cb = function()
+                Win {
+                  heading = "Edit Branch Details", -- if info.ispr, change to Edit PR
+                  content = wt:as_buffer_content(),
+                  config = { insert = false, start_pos = { 1, 7 }, height = "55%" },
+                  on_exit = function(_, abort, content)
+                    if abort then
+                      return
+                    end
+                    wt:update(content)
+                  end,
+                }
               end,
             }
           end,
