@@ -1,4 +1,5 @@
 local msgs = require "worktree.msgs"
+local fmt = require "worktree.fmt"
 local M = {}
 
 ---TODO: refactor, move assert stuff to assert? and have three main sections of jobs: set, get, perform
@@ -95,6 +96,28 @@ get.default_branch_name = function(has_remote, cwd)
   return default
 end
 
+get.branches = function(cwd)
+  local res = { { text = "Default", name = get.default_branch_name(false, cwd) } }
+  local output, _ = Job { "git", "branch", cwd = cwd, sync = true }
+  for _, branch in ipairs(output) do
+    branch = vim.trim(branch)
+    if branch:match "*" then
+      branch = vim.trim(branch:gsub("*", ""))
+      res[#res + 1] = {
+        current = true,
+        text = "Current",
+        name = branch,
+        title = fmt.into_title(branch),
+      }
+    elseif branch ~= "master" and branch ~= "name" then
+      local title = fmt.into_title(branch)
+      res[#res + 1] = { text = title, title = title, name = branch }
+    end
+  end
+
+  return res
+end
+
 M.set = {}
 local set = M.set
 ---Update branch name
@@ -147,7 +170,7 @@ end
 assert.is_branch = function(branch_name, cwd)
   local args = { "git", "show-ref", "--quiet", "refs/heads/" .. branch_name, cwd = cwd }
   args.on_exit = function(j, code)
-    j._stdout_results = code ~= 0
+    j._stdout_results = code == 0
   end
   return Job(args)
 end
@@ -180,7 +203,7 @@ local perform = M.perform
 ---@return Job
 perform.merge_remote = function(branch_name, cwd)
   local remote_name = get.remote_name(cwd)
-  local args = { "git", "merge", remote_name, branch_name, cwd = cwd }
+  local args = { "git", "merge", remote_name .. "/" .. branch_name, cwd = cwd }
   args.on_exit = msgs.merge_remote
   return Job(args)
 end

@@ -10,8 +10,8 @@ local fmt = require "worktree.fmt"
 ---@field type table
 ---@field cwd string
 local Worktree = {
-  exists = function(self)
-    return assert.is_branch(self.name, self.cwd()):sync()
+  exists = function(self, name)
+    return assert.is_branch(name or self.name, self.cwd):sync()
   end,
 }
 
@@ -75,7 +75,7 @@ Worktree.update = function(self, buflines, cb)
     set.name(self.name, change.name, self.cwd):sync()
   end
   if diff.body then
-    set.description(self.name, change.body, self.cwd):sync()
+    set.description(change.name, change.body, self.cwd):sync()
   end
 
   self.name = diff.name and change.name or self.name
@@ -131,7 +131,7 @@ end
 ---Open new pr for worktree using { buflines } if available
 ---@param self WorkTree
 ---@param cb any
-Worktree.pr = function(self, cb)
+Worktree.to_pr = function(self, cb)
   cb = cb and cb or function() end
   local fetch = perform.fetch(self.cwd)
   local push = perform.push(self.name, self.cwd)

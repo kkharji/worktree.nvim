@@ -15,7 +15,7 @@ M.create = function(cwd)
     Win {
       heading = choice.description,
       content = Worktree:template(),
-      config = { insert = true, move = { 3, 1 } },
+      config = { insert = true, start_pos = { 1, 3 }, height = "20%" },
       on_exit = function(_, abort, buflines)
         if abort then
           return
@@ -36,7 +36,7 @@ M.edit = function(branch_name, cwd)
   Win {
     heading = "Edit Branch Details", -- if info.ispr, change to Edit PR
     content = worktree:as_buffer_content(),
-    config = { insert = false, start_pos = { 1, 7 }, move = { { 3, 1 } } },
+    config = { insert = false, start_pos = { 1, 7 }, height = "55%" },
     on_exit = function(_, abort, content)
       if abort then
         return
@@ -52,6 +52,10 @@ end
 M.pr_open = function(branch_name, cwd)
   local name = branch_name and branch_name or "current"
   local worktree = Worktree:new(name, cwd or vim.loop.cwd())
+  if worktree.has_pr then
+    print "pr is opened or origin remote branch exists. Edting instead."
+    return M.edit(name, cwd)
+  end
   Win {
     heading = "New Pull Request",
     content = worktree:as_buffer_content(),
@@ -63,7 +67,7 @@ M.pr_open = function(branch_name, cwd)
     on_exit = function(_, abort, content)
       if not abort then
         worktree:update(content)
-        worktree:pr()
+        worktree:to_pr()
       end
     end,
   }
