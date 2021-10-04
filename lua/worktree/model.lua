@@ -9,11 +9,11 @@ local fmt = require "worktree.fmt"
 ---@field body string
 ---@field type table
 ---@field cwd string
-local Worktree = {
-  exists = function(self)
-    return assert.is_branch(self.name, self.cwd()):sync()
-  end,
-}
+local Worktree = {}
+
+Worktree.exists = function(self)
+  return assert.is_branch(self.name, self.cwd):sync()
+end
 
 Worktree.__index = Worktree
 
@@ -228,7 +228,7 @@ end
 ---@overload fun(self: WorkTree, name: string, cwd: string): WorkTree
 ---@return WorkTree
 Worktree.new = function(self, arg, cwd, typeinfo)
-  local o = { cwd = cwd }
+  local o = setmetatable({ cwd = cwd }, self)
 
   if type(arg) == "table" then
     local p = self:parse(arg, typeinfo)
@@ -245,12 +245,14 @@ Worktree.new = function(self, arg, cwd, typeinfo)
     end
     if o:exists() then
       o.body = get.description(o.name, cwd):sync()
+    else
+      o.body = { "", "" }
     end
   end
 
   o.has_pr = assert.has_origin_version(o.name, o.cwd)
 
-  return setmetatable(o, self)
+  return o
 end
 
 return Worktree

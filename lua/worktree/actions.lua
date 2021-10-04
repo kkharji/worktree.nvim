@@ -147,7 +147,7 @@ end
 assert.is_branch = function(branch_name, cwd)
   local args = { "git", "show-ref", "--quiet", "refs/heads/" .. branch_name, cwd = cwd }
   args.on_exit = function(j, code)
-    j._stdout_results = code ~= 0
+    j._stdout_results = code == 0
   end
   return Job(args)
 end

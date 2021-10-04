@@ -32,6 +32,7 @@ local call = function(opts)
   end
   local prompt = new(opts)
   prompt:mount()
+  vim.cmd "startinsert"
   prompt:map("i", "<esc>", prompt.input_props.on_close, {})
   prompt:on(event.BufLeave, prompt.input_props.on_close)
 end
