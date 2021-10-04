@@ -137,6 +137,12 @@ set.name = function(branch_name, new, cwd)
   return Job(args)
 end
 
+set.upstream = function(remote, branch_name, cwd)
+  local cmd = ("--set-upstream-to=%s/%s"):format(remote, branch_name)
+  local args = { "git", "branch", cmd, cwd = cwd }
+  return Job(args)
+end
+
 ---Update branch local description
 ---@param branch_name string
 ---@param description string
@@ -190,7 +196,7 @@ end
 ---@param cwd string
 assert.has_remote = function(cwd)
   local name = get.remote_name(cwd)
-  return not name and false or true
+  return name and name or false
 end
 
 M.perform = {}
@@ -329,12 +335,85 @@ perform.pr_update = function(fields, cwd)
   return start
 end
 
+---Create new branch
+-- TODO: support creating for other than default branch
+---@param wt WorkTree
+---@param cb any
+perform.create_branch = function(wt, cb)
+  local has_remote = assert.has_remote(wt.cwd)
+  local base = get.default_branch_name(has_remote, wt.cwd)
+
+  local checkout = perform.checkout(base, wt.cwd)
+  local merge = perform.merge_remote(base, wt.cwd)
+  local new = perform.checkout(wt.name, wt.cwd)
+  local set_description = set.description(wt.name, wt.body, wt.cwd)
+  -- local set_upstream = set.upstream(wt.name, wt.upstream, wt.cwd)
+
+  checkout:after_failure(function()
+    print "checkout failed"
+  end)
+
+  if has_remote then
+    checkout:and_then_on_success(merge)
+    merge:and_then_on_success(new)
+    merge:after_failure(function()
+      print "merge failed"
+    end)
+  else
+    checkout:and_then_on_success(new)
+  end
+
+  new:and_then_on_success(set_description)
+  -- new:and_then_on_success(set_upstream)
+  -- set_upstream:and_then_on_success(set_description)
+  set_description:after_success(function()
+    print(string.format("created '%s' and switched to it", wt.name));
+    (cb or function() end)()
+  end)
+
+  checkout:start()
+end
+
 ---Job to create new pr
----@param cwd string
+---@param wt WorkTree
 ---@return Job
 -- fails when the branch is already connected to a pull request
-perform.pr_open = function(title, body, cwd)
-  return Job { "gh", "pr", "create", "--title", title, "--body", body, cwd = cwd, on_exit = msgs.pr_open }
+perform.pr_open = function(wt, cb)
+  cb = cb and cb or function() end
+  local create = Job {
+    "gh",
+    "pr",
+    "create",
+    "--title",
+    wt.title,
+    "--body",
+    wt.body,
+    cwd = wt.cwd,
+    on_exit = msgs.pr_open,
+  }
+  local fetch = perform.fetch(wt.cwd)
+  local push = perform.push(wt.name, wt.cwd)
+  local fork = perform.gh_fork(wt.cwd)
+
+  --- Make sure remote branches are recognized locally.
+  fetch:and_then_on_success(push)
+
+  push:and_then_on_success(create)
+  create:after(cb)
+
+  push:after_failure(function()
+    print "No write access, forking and creating pr instead ..."
+    fork:and_then_on_success(create)
+    create:after(cb)
+    fork:after_failure(function()
+      error "Failed to fork repo ..."
+    end)
+    fork:start()
+  end)
+
+  fetch:start()
+
+  wt.has_pr = true
 end
 
 perform.pr_squash = function(body, cwd)

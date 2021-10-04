@@ -9,6 +9,7 @@ local fmt = require "worktree.fmt"
 ---@field body string
 ---@field type table
 ---@field cwd string
+---@field upstream string @name of upstream repo
 local Worktree = {
   exists = function(self, name)
     return assert.is_branch(name or self.name, self.cwd):sync()
@@ -95,69 +96,12 @@ end
 
 ---Create new branch through checking out master, merging recent remote,
 ---checking out the new branch out of base and lastly set description
-Worktree.create = function(self, cb) -- TODO: support creating for other than default branch
-  local has_remote = assert.has_remote(self.cwd)
-  local base = get.default_branch_name(has_remote, self.cwd)
-
-  local checkout = perform.checkout(base, self.cwd)
-  local merge = perform.merge_remote(base, self.cwd)
-  local new = perform.checkout(self.name, self.cwd)
-  local describe = set.description(self.name, self.body, self.cwd)
-
-  checkout:after_failure(function()
-    print "checkout failed"
-  end)
-
-  if has_remote then
-    checkout:and_then_on_success(merge)
-    merge:and_then_on_success(new)
-    merge:after_failure(function()
-      print "merge failed"
-    end)
-  else
-    --- FIXME: doesn't create branch after here
-    checkout:and_then_on_success(new)
-  end
-
-  new:and_then_on_success(describe)
-  describe:after_success(function()
-    print(string.format("created '%s' and switched to it", self.name));
-    (cb or function() end)()
-  end)
-
-  checkout:start()
-end
+Worktree.create = perform.create_branch
 
 ---Open new pr for worktree using { buflines } if available
 ---@param self WorkTree
 ---@param cb any
-Worktree.to_pr = function(self, cb)
-  cb = cb and cb or function() end
-  local fetch = perform.fetch(self.cwd)
-  local push = perform.push(self.name, self.cwd)
-  local fork = perform.gh_fork(self.cwd)
-  local create = perform.pr_open(self.title, self.body, self.cwd)
-
-  --- Make sure remote branches are recognized locally.
-  fetch:and_then_on_success(push)
-
-  push:and_then_on_success(create)
-  create:after(cb)
-
-  push:after_failure(function()
-    print "No write access, forking and creating pr instead ..."
-    fork:and_then_on_success(create)
-    create:after(cb)
-    fork:after_failure(function()
-      error "Failed to fork repo ..."
-    end)
-    fork:start()
-  end)
-
-  fetch:start()
-
-  self.has_pr = true
-end
+Worktree.to_pr = perform.pr_open
 
 ---@param self WorkTree
 ---@param target string
@@ -248,6 +192,7 @@ Worktree.new = function(self, arg, cwd, typeinfo)
   end
 
   o.has_pr = assert.has_origin_version(o.name, o.cwd)
+  o.upstream = get.remote_name(o.cwd)
 
   return setmetatable(o, self)
 end
