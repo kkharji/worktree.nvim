@@ -29,7 +29,7 @@ end
 ---Edit details
 ---@param cwd string @current working directory
 ---@param branch_name string @branch name
-M.edit = function(branch_name, cwd)
+M.edit = function(branch_name, cwd, cb)
   cwd = cwd or vim.loop.cwd()
   local name = branch_name and branch_name or "current"
   local worktree = Worktree:new(name, cwd)
@@ -41,7 +41,7 @@ M.edit = function(branch_name, cwd)
       if abort then
         return
       end
-      worktree:update(content)
+      worktree:update(content, cb)
     end,
   }
 end

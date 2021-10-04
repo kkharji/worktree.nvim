@@ -25,7 +25,7 @@ get.branches = function(cwd)
 
   local output, _ = Job { "git", "for-each-ref", "--perl", "--format", format, cwd = cwd, sync = true }
   for i, line in ipairs(output) do
-    output[i] = fmt.parse_branch_info_line(line)
+    output[i] = fmt.parse_branch_info_line(line, cwd)
   end
   return output
 end
@@ -434,14 +434,16 @@ perform.delete = function(name, current, cwd)
   if current then
     perform.checkout(get.default_branch_name(true, cwd)):sync()
   end
-  local job = Job { "git", "branch", "-D", name, cwd = cwd, on_exit = msgs.delete }
-  job:sync()
+  Job { "git", "branch", "-D", name, cwd = cwd, on_exit = msgs.delete, sync = true }
 end
 
 M.picker = {}
 local picker = M.picker
+local state = require "telescope.actions.state"
 
-picker.delete_branch = function(entry, cwd)
+picker.delete_branch = function()
+  local entry = state.get_selected_entry()
+  vim.cmd "stopinsert"
   menu {
     heading = "Delete " .. entry.subject .. "?",
     size = { 3, 30 },
@@ -451,14 +453,13 @@ picker.delete_branch = function(entry, cwd)
       { text = "No", delete = false },
     },
     on_close = function(_, choice)
-      if choice == nil or not choice.delete then
-        return
+      if choice ~= nil and choice.delete then
+        perform.delete(entry.name, entry.current, entry.cwd)
       end
-      perform.delete(entry.name, entry.current, cwd)
+      require("telescope.builtin").resume()
+      vim.cmd "startinsert"
     end,
   }
 end
-
--- picker.delete_branch { subject = "hello world" }
 
 return M

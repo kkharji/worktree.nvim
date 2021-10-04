@@ -49,7 +49,7 @@ local unescape_single_quote = function(v)
   return string.gsub(v, "\\([\\'])", "%1")
 end
 
-fmt.parse_branch_info_line = function(line)
+fmt.parse_branch_info_line = function(line, cwd)
   local fields = vim.split(string.sub(line, 2, -2), "''", true)
   local entry = {
     head = fields[1],
@@ -76,6 +76,7 @@ fmt.parse_branch_info_line = function(line)
   entry.subject = fmt.get_subject(entry.title) or entry.title
   entry.scope = (fmt.get_type(entry.title) or "none") .. "/" .. (fmt.get_scope(entry.title) or "*")
   entry.current = entry.head == "*"
+  entry.cwd = cwd
 
   return entry
 end
