@@ -95,25 +95,20 @@ end
 
 ---Create new branch through checking out master, merging recent remote,
 ---checking out the new branch out of base and lastly set description
-Worktree.create = function(self, cb) -- TODO: support creating for other than default branch
+Worktree.create = function(self, body) -- TODO: support creating for other than default branch
   local has_remote = assert.has_remote(self.cwd)
   local base = get.default_branch_name(has_remote, self.cwd)
 
   local checkout = perform.checkout(base, self.cwd)
-  local merge = perform.merge_remote(base, self.cwd)
+  local merge = perform.merge_remote(self.cwd)
   local new = perform.checkout(self.name, self.cwd)
-  local describe = set.description(self.name, self.body, self.cwd)
+  local describe = set.description(self.name, body and body or self.body, self.cwd)
 
-  checkout:after_failure(function()
-    print "checkout failed"
-  end)
+  checkout:after_failure()
 
   if has_remote then
     checkout:and_then_on_success(merge)
     merge:and_then_on_success(new)
-    merge:after_failure(function()
-      print "merge failed"
-    end)
   else
     --- FIXME: doesn't create branch after here
     checkout:and_then_on_success(new)
@@ -121,8 +116,7 @@ Worktree.create = function(self, cb) -- TODO: support creating for other than de
 
   new:and_then_on_success(describe)
   describe:after_success(function()
-    print(string.format("created '%s' and switched to it", self.name));
-    (cb or function() end)()
+    print(string.format("created '%s' and switched to it", self.name))
   end)
 
   checkout:start()
@@ -243,8 +237,15 @@ Worktree.new = function(self, arg, cwd, typeinfo)
 
   if type(arg) == "string" then
     o.name = arg == "current" and get.name(cwd):sync()[1] or arg
-    o.title = fmt.into_title(o.name)
-    o.body = get.description(o.name, cwd):sync()
+    if o.name:match ":" then
+      o.title = o.name
+      o.name = fmt.into_name(o.title)
+    else
+      o.title = fmt.into_title(o.name)
+    end
+    if o:exists() then
+      o.body = get.description(o.name, cwd):sync()
+    end
   end
 
   o.has_pr = assert.has_origin_version(o.name, o.cwd)

@@ -1,7 +1,7 @@
 local M = {}
 
 M.checkout = {
-  err = "Failed to checkout/create branch",
+  err = "Failed to checkout/create a given branch",
   pass = "checked out/created a new branch",
 }
 
