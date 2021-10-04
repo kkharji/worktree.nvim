@@ -25,10 +25,10 @@ end
 
 local call = function(opts)
   opts.close = function()
-    opts.on_close(true)
+    (opts.on_close or function() end)(true)
   end
   opts.submit = function(value)
-    opts.on_close(false, value)
+    opts.on_submit(value)
   end
   local prompt = new(opts)
   prompt:mount()

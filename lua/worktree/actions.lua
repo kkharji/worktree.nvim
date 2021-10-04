@@ -118,6 +118,7 @@ get.branches = function(cwd)
   return res
 end
 
+-- I(get.branches(vim.loop.cwd()))
 
 M.set = {}
 local set = M.set

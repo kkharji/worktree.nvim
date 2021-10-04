@@ -113,15 +113,17 @@ end
 
 ---Create new branch through checking out master, merging recent remote,
 ---checking out the new branch out of base and lastly set description
-Worktree.create = function(self, body) -- TODO: support creating for other than default branch
+Worktree.create = function(self, opts) -- TODO: support creating for other than default branch
   body = body and body or self:template(true)
   local has_remote = assert.has_remote(self.cwd)
-  local base = get.default_branch_name(has_remote, self.cwd)
+  local base = opts.base and opts.base or get.default_branch_name(has_remote, self.cwd)
+
+  -- I(opts)
 
   local checkout = perform.checkout(base, self.cwd)
   local merge = perform.merge_remote(base, self.cwd)
   local new = perform.checkout(self.name, self.cwd)
-  local describe = set.description(self.name, table.concat(body, "\n"), self.cwd)
+  local describe = set.description(self.name, table.concat(opts.body, "\n"), self.cwd)
 
   checkout:after_failure()
 
@@ -136,10 +138,19 @@ Worktree.create = function(self, body) -- TODO: support creating for other than 
   describe:after_success(function()
     print(string.format("created '%s' and switched to it", self.name))
   end)
+  describe:after_success(function()
+    if opts.cb then
+      opts.cb(self)
+    end
+  end)
 
   checkout:start()
 end
 
+Worktree.current_branches = function(self, cwd)
+  cwd = cwd or self.cwd
+  return get.branches(cwd)
+end
 ---Open new pr for worktree using { buflines } if available
 ---@param self WorkTree
 ---@param cb any

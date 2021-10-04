@@ -1,5 +1,6 @@
 local Worktree = require "worktree.model"
-local prompt = require "worktree.prompt"
+local Prompt = require "worktree.prompt"
+local Menu = require "worktree.menu"
 local pickers = require "worktree.pickers"
 local user = _G.user
 if not user then
@@ -13,16 +14,26 @@ local M = {}
 M.create = function(cwd)
   cwd = cwd or vim.loop.cwd()
   --- TODO: Prompt only for name and then edit using M.edit
-  pickers.pick_branch_type("Pick Branch Type > ", function(choice)
-    prompt {
-      heading = choice.prefix:gsub("^%l", string.upper) .. " Branch name (scope: name)",
+  --- TODO: make choices configured in config.lua
+  pickers.pick_branch_type("Pick Branch Type > ", function(typeinfo)
+    Prompt {
+      heading = typeinfo.prefix:gsub("^%l", string.upper) .. " Branch name (scope: name)",
       default = "",
-      on_close = function(aborted, title)
-        if aborted then
-          return
-        end
-        --- TODO: make choices configured in config.lua
-        Worktree:new(title, cwd, choice):create(choice.template)
+      on_submit = function(title)
+        Menu {
+          heading = "[Pick Base Branch]",
+          choices = Worktree:current_branches(cwd),
+          on_close = function(_, base)
+            local wt = Worktree:new(title, cwd, typeinfo)
+            wt:create {
+              base = base and base.name or nil,
+              body = typeinfo.template or Worktree:template(true),
+              cb = function(wt)
+                M.edit(wt.name, wt.cwd)
+              end,
+            }
+          end,
+        }
       end,
     }
   end)
