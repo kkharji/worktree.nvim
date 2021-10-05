@@ -30,8 +30,6 @@ get.branches = function(cwd)
   return output
 end
 
--- I(get.branches(vim.loop.cwd()))
-
 ---Check whether a branch has a upstream/origin repo
 ---@param cwd string
 ---@return Job
@@ -113,8 +111,34 @@ get.default_branch_name = function(has_remote, cwd)
   return default
 end
 
+get.last_stash_for = function(branch_name, cwd)
+  local name = branch_name
+  local stash_list = {}
+  if name:match "/" then
+    local parts = vim.split(branch_name, "/")
+    name = parts[#parts]
+  end
+  local res, _ = Job { "git", "stash", "list", sync = true, cwd = cwd }
+  for _, stash in ipairs(res) do
+    if string.match(stash, name) then
+      stash_list[#stash_list + 1] = stash
+    end
+  end
+
+  if #stash_list == 0 then
+    return nil
+  end
+
+  if #stash_list >= 2 then
+    print "There are multiple stashs avalible, please use :Telescope git_stash. using last stash"
+  end
+
+  return string.match(stash_list[1], "(%S+):")
+end
+
 M.set = {}
 local set = M.set
+
 ---Update branch name
 ---@param branch_name string
 ---@param new string
@@ -150,6 +174,11 @@ end
 
 M.assert = {}
 local assert = M.assert
+
+assert.is_dirty = function(cwd)
+  local args = { "git", "status", "--porcelain", cwd = cwd }
+  return Job(args)
+end
 
 ---Check if user is connect to the network
 ---@param as_job any
@@ -260,6 +289,14 @@ perform.push = function(branch_name, cwd)
   local remote = get.remote_name(cwd)
   local args = { "git", "push", "-u", remote, branch_name, cwd = cwd, on_exit = msgs.push }
   return Job(args)
+end
+
+perform.stash_pop = function(stashhash, cwd)
+  return Job { "git", "stash", "pop", stashhash, cwd = cwd, on_exit = msgs.stash_pop }
+end
+
+perform.stash_push = function(cwd)
+  return Job { "git", "stash", "push", "-u", cwd = cwd, on_exit = msgs.stash_push }
 end
 
 ---Checkout a given branch name. If branch name is master or main then then simply switch?
@@ -464,13 +501,43 @@ picker.delete_branch = function()
   }
 end
 
-picker.edit_branch = function(_)
+picker.switch_branch = function(bufnr)
+  local entry = s.get_selected_entry()
+  a.close(bufnr)
+  local switch = Job { "git", "switch", entry.name, on_exit = msgs.switch }
+  local last_stash = get.last_stash_for(entry.name, entry.cwd)
+  local is_dirty = assert.is_dirty(entry.cwd)
+  is_dirty:after(function(j, _)
+    local dirty = not vim.tbl_isempty(j._stdout_results)
+    if dirty then
+      local stash = perform.stash_push(entry.cwd)
+      stash:and_then_on_success(switch)
+      switch:after_success(function()
+        if last_stash then
+          perform.stash_pop(last_stash, entry.cwd):start()
+        end
+      end)
+      stash:start()
+    else
+      switch:after_success(function()
+        if last_stash then
+          perform.stash_pop(last_stash, entry.cwd):start()
+        end
+      end)
+      switch:start()
+    end
+  end)
+
+  is_dirty:start()
+end
+
+picker.edit_branch = function(bufnr)
   local insert = vim.fn.mode() == "i"
   local entry = s.get_selected_entry()
   if insert then
     vim.cmd "stopinsert"
   end
-  --- FIX: highlights break for some odd reason
+  a.close(bufnr)
   require("worktree").edit(entry.name, entry.cwd, function()
     if insert then
       vim.cmd "startinsert"

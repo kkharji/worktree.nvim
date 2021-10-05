@@ -108,25 +108,27 @@ M.pick_branch_merge_type = function(cb)
   }):find()
 end
 
-M.switcher = function()
+M.switcher = function(opts)
   -- local dd = dropdown { layout_config = { width = 0.4, height = 0.2 } }
   local parts = vim.split(vim.loop.cwd(), "/")
   local name = parts[#parts]
-  picker(dropdown, {
+  picker(vim.tbl_extend("keep", opts or {}, dropdown), {
     prompt_prefix = name .. " > ",
     sorter = sorter {},
+    initial_mode = "normal",
+    hide_cursor = true,
     attach_mappings = function(_, map)
-      map("n", "<C-d>", pactions.delete_branch)
       map("i", "<C-d>", pactions.delete_branch)
+      map("n", "dd", pactions.delete_branch)
 
-      map("n", "<C-s>", pactions.merge_branch)
       map("i", "<C-s>", pactions.merge_branch)
+      map("n", "mm", pactions.merge_branch)
 
-      map("n", "<C-e>", pactions.edit_branch)
       map("i", "<C-e>", pactions.edit_branch)
+      map("n", "cc", pactions.edit_branch)
 
-      map("n", "<CR>", pactions.switch_branch)
       map("i", "<CR>", pactions.switch_branch)
+      map("n", "<CR>", pactions.switch_branch)
       return true
     end,
     finder = finder {
@@ -149,7 +151,5 @@ M.switcher = function()
     },
   }):find()
 end
-
-M.switcher()
 
 return M
