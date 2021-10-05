@@ -550,11 +550,10 @@ picker.create_branch = function(bufnr)
   end
 
   require("worktree").create(nil, function()
+    require("telescope.builtin").resume { cache_index = 2 }
     if insert then
       vim.cmd "startinsert"
     end
-    ---FIXME: returns to create picker instead of switcher
-    require("telescope.builtin").resume()
   end)
 end
 
