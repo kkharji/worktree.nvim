@@ -112,47 +112,23 @@ M.switcher = function()
   -- local dd = dropdown { layout_config = { width = 0.4, height = 0.2 } }
   local parts = vim.split(vim.loop.cwd(), "/")
   local name = parts[#parts]
-  local cwd = vim.loop.cwd()
-
   picker(dropdown, {
     prompt_prefix = name .. " > ",
     sorter = sorter {},
     attach_mappings = function(_, map)
-      local edit = function(_)
-        local entry = s.get_selected_entry()
-        require("worktree").edit(entry.name, cwd, function()
-          require("telescope.builtin").resume()
-        end)
-      end
-
-      local merge = function(bufnr)
-        local entry = s.get_selected_entry()
-      end
-
-      local delete = function(bufnr)
-        local entry = s.get_selected_entry()
-        local confirm = vim.fn.input("Delete " .. entry.subject .. "?")
-        if confirm == "yes" or confirm == "y" then
-          perform.delete(entry.name, entry.current, entry.cwd)
-        end
-      end
-
       --- C-d delete branch, confirm delete action using menu
       map("n", "<C-d>", pactions.delete_branch)
       map("i", "<C-d>", pactions.delete_branch)
       --- C-s select merge strategy and target branch to merge into
-      map("n", "<C-s>", merge)
-      map("i", "<C-s>", merge)
+      map("n", "<C-s>", pactions.merge)
+      map("i", "<C-s>", pactions.merge)
       --- C-e edit branch description or create new one with the given name, select type later
-      map("n", "<C-e>", edit)
-      map("i", "<C-e>", edit)
+      map("n", "<C-e>", pactions.edit)
+      map("i", "<C-e>", pactions.edit)
       --- <CR> switch, stash if there are changes and popup back when returning to the branch
       --- TODO find out how git stash works
-      -- map("n", "<CR>", actions.picker.switch)
-      -- a.select_default:replace(function(bufnr)
-      --   a.close(bufnr)
-      --   return cb(s.get_selected_entry())
-      -- end)
+      map("n", "<CR>", pactions.switch_branch)
+      map("i", "<CR>", pactions.switch_branch)
       return true
     end,
     finder = finder {

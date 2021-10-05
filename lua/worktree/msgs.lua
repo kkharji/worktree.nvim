@@ -37,6 +37,11 @@ M.set_name = {
   pass = "Updated branch name",
 }
 
+M.switch = {
+  err = "Failed to switch to another branch",
+  pass = "successfully switch to another branch",
+}
+
 M.set_description = {
   err = "Failed to update branch description",
 }

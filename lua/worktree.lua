@@ -39,7 +39,7 @@ M.edit = function(branch_name, cwd, cb)
     config = { insert = false, start_pos = { 1, 7 }, height = "55%" },
     on_exit = function(_, abort, content)
       if abort then
-        return
+        return (function() end or cb)()
       end
       worktree:update(content, cb)
     end,

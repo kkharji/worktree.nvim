@@ -439,10 +439,12 @@ end
 
 M.picker = {}
 local picker = M.picker
-local state = require "telescope.actions.state"
+
+local s = require "telescope.actions.state"
+local a = require "telescope.actions"
 
 picker.delete_branch = function()
-  local entry = state.get_selected_entry()
+  local entry = s.get_selected_entry()
   vim.cmd "stopinsert"
   menu {
     heading = "Delete " .. entry.subject .. "?",
@@ -460,6 +462,25 @@ picker.delete_branch = function()
       vim.cmd "startinsert"
     end,
   }
+end
+
+picker.edit = function(_)
+  local insert = vim.fn.mode() == "i"
+  local entry = s.get_selected_entry()
+  if insert then
+    vim.cmd "stopinsert"
+  end
+  --- FIX: highlights break for some odd reason
+  require("worktree").edit(entry.name, entry.cwd, function()
+    if insert then
+      vim.cmd "startinsert"
+    end
+    require("telescope.builtin").resume()
+  end)
+end
+
+picker.merge = function(_)
+  local entry = s.get_selected_entry()
 end
 
 return M
