@@ -11,7 +11,7 @@ local M = {}
 ---@param cwd string @current working directory
 M.create = function(cwd, cb)
   cwd = cwd or vim.loop.cwd()
-  pickers.pick_branch_type("Pick Branch Type > ", function(choice)
+  pickers.pick_branch_type("Pick Branch Type", function(choice)
     Win {
       heading = choice.description,
       content = Worktree:template(),

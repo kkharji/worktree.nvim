@@ -26,7 +26,7 @@ end
 M.pick_branch_type = function(title, cb)
   -- local dd = dropdown { layout_config = { width = 0.4, height = 0.3 } }
   picker(dropdown, {
-    prompt_prefix = title,
+    prompt_title = title,
     finder = finder {
       results = commit_choices(),
       entry_maker = function(entry)
@@ -73,7 +73,8 @@ end
 M.pick_branch_merge_type = function(cb)
   -- local dd = dropdown { layout_config = { width = 0.3, height = 0.2 } }
   picker(dropdown, {
-    prompt_prefix = "Pick merge type> ",
+    prompt_title = "Pick Merge type",
+    prompt_prefix = "",
     sorter = sorter {},
     finder = finder {
       results = {
@@ -113,7 +114,8 @@ M.switcher = function(opts)
   local parts = vim.split(vim.loop.cwd(), "/")
   local name = parts[#parts]
   picker(vim.tbl_extend("keep", opts or {}, dropdown), {
-    prompt_prefix = name .. " > ",
+    prompt_prefix = "",
+    prompt_title = name .. " Worktree",
     sorter = sorter {},
     initial_mode = "normal",
     hide_cursor = true,
