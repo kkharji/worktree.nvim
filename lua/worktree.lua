@@ -39,7 +39,9 @@ M.edit = function(branch_name, cwd, cb)
     config = { insert = false, start_pos = { 1, 7 }, height = "55%" },
     on_exit = function(_, abort, content)
       if abort then
-        return (function() end or cb)()
+        if cb then
+          cb()
+        end
       end
       worktree:update(content, cb)
     end,
@@ -98,5 +100,7 @@ M.merge = function(branch_name, target, cwd)
     }
   end)
 end
+
+M.switcher = require("worktree.pickers").switcher
 
 return M
