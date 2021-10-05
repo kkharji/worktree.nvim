@@ -9,7 +9,7 @@ local M = {}
 
 ---Create new branch from current working directory
 ---@param cwd string @current working directory
-M.create = function(cwd)
+M.create = function(cwd, cb)
   cwd = cwd or vim.loop.cwd()
   pickers.pick_branch_type("Pick Branch Type > ", function(choice)
     Win {
@@ -18,9 +18,9 @@ M.create = function(cwd)
       config = { insert = true, start_pos = { 1, 3 }, height = "20%" },
       on_exit = function(_, abort, buflines)
         if abort then
-          return
+          return (cb or function() end)()
         end
-        Worktree:new(buflines, cwd, choice):create()
+        Worktree:new(buflines, cwd, choice):create(cb)
       end,
     }
   end)

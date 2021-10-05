@@ -118,14 +118,17 @@ M.switcher = function(opts)
     initial_mode = "normal",
     hide_cursor = true,
     attach_mappings = function(_, map)
+      map("i", "<C->", pactions.create_branch)
+      map("n", "n", pactions.create_branch)
+
       map("i", "<C-d>", pactions.delete_branch)
-      map("n", "dd", pactions.delete_branch)
+      map("n", "d", pactions.delete_branch)
 
       map("i", "<C-s>", pactions.merge_branch)
-      map("n", "mm", pactions.merge_branch)
+      map("n", "m", pactions.merge_branch)
 
       map("i", "<C-e>", pactions.edit_branch)
-      map("n", "cc", pactions.edit_branch)
+      map("n", "e", pactions.edit_branch)
 
       map("i", "<CR>", pactions.switch_branch)
       map("n", "<CR>", pactions.switch_branch)

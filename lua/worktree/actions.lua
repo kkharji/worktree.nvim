@@ -30,6 +30,13 @@ get.branches = function(cwd)
   return output
 end
 
+---Job to get pr info
+---@param cwd string
+---@return Job
+get.pr_info = function(cwd)
+  return Job { "gh", "pr", "view", "--json", "title", "--json", "body", cwd = cwd }
+end
+
 ---Check whether a branch has a upstream/origin repo
 ---@param cwd string
 ---@return Job
@@ -226,6 +233,39 @@ end
 M.perform = {}
 local perform = M.perform
 
+---Preserve uncommited changes before switching or create new branch, and after
+---the main job is ran, pop any changes.
+---@param name string
+---@param cwd string
+---@param main Job
+---@return Job
+perform.pre_post_switch = function(name, cwd, main)
+  local last_stash = get.last_stash_for(name, cwd)
+  local is_dirty = assert.is_dirty(cwd)
+  is_dirty:after(function(j, _)
+    local dirty = not vim.tbl_isempty(j._stdout_results)
+    if dirty then
+      local stash = perform.stash_push(cwd)
+      stash:and_then_on_success(main)
+      main:after_success(function()
+        if last_stash then
+          perform.stash_pop(last_stash, cwd):start()
+        end
+      end)
+      stash:start()
+    else
+      main:after_success(function()
+        if last_stash then
+          perform.stash_pop(last_stash, cwd):start()
+        end
+      end)
+      main:start()
+    end
+  end)
+
+  return is_dirty
+end
+
 ---Merge remote change for a branch name if any, skip otherwise
 --TODO: make it skip if not remote branch
 ---@param branch_name string
@@ -337,13 +377,6 @@ perform.gh_fork = function(cwd)
   return Job { "gh", "repo", "fork", "--remote=true", cwd = cwd, on_exit = msgs.fork }
 end
 
----Job to get pr info
----@param cwd string
----@return Job
-get.pr_info = function(cwd)
-  return Job { "gh", "pr", "view", "--json", "title", "--json", "body", cwd = cwd }
-end
-
 ---Job to update info
 ---@param cwd string
 ---@return Job
@@ -398,12 +431,12 @@ perform.create_branch = function(wt, cb)
   new:and_then_on_success(set_description)
   -- new:and_then_on_success(set_upstream)
   -- set_upstream:and_then_on_success(set_description)
-  set_description:after_success(function()
+  set_description:after_success(vim.schedule_wrap(function()
     print(string.format("created '%s' and switched to it", wt.name));
     (cb or function() end)()
-  end)
+  end))
 
-  checkout:start()
+  perform.pre_post_switch(wt.name, wt.cwd, checkout):start()
 end
 
 ---Job to create new pr
@@ -505,30 +538,24 @@ picker.switch_branch = function(bufnr)
   local entry = s.get_selected_entry()
   a.close(bufnr)
   local switch = Job { "git", "switch", entry.name, on_exit = msgs.switch }
-  local last_stash = get.last_stash_for(entry.name, entry.cwd)
-  local is_dirty = assert.is_dirty(entry.cwd)
-  is_dirty:after(function(j, _)
-    local dirty = not vim.tbl_isempty(j._stdout_results)
-    if dirty then
-      local stash = perform.stash_push(entry.cwd)
-      stash:and_then_on_success(switch)
-      switch:after_success(function()
-        if last_stash then
-          perform.stash_pop(last_stash, entry.cwd):start()
-        end
-      end)
-      stash:start()
-    else
-      switch:after_success(function()
-        if last_stash then
-          perform.stash_pop(last_stash, entry.cwd):start()
-        end
-      end)
-      switch:start()
-    end
-  end)
+  perform.pre_post_switch(entry.name, entry.cwd, switch):start()
+end
 
-  is_dirty:start()
+picker.create_branch = function(bufnr)
+  local insert = vim.fn.mode() == "i"
+  a.close(bufnr)
+
+  if insert then
+    vim.cmd "stopinsert"
+  end
+
+  require("worktree").create(nil, function()
+    if insert then
+      vim.cmd "startinsert"
+    end
+    ---FIXME: returns to create picker instead of switcher
+    require("telescope.builtin").resume()
+  end)
 end
 
 picker.edit_branch = function(bufnr)
