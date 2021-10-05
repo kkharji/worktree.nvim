@@ -99,4 +99,19 @@ M.merge = function(branch_name, target, cwd)
   end)
 end
 
+M.commit_changes = function(all, ammend)
+  pickers.pick_branch_type("Pick commit type >", function(choice)
+    Win {
+      heading = "Write commit message", --- TODO: have branch name "commit to %s"
+      --- TODO: have changes made in the buffer
+      content = { choice.prefix .. ": ", "", "" },
+      config = {
+        insert = true,
+        start_pos = { 1, #choice.prefix + 2 },
+        filetype = "gitcommit",
+      },
+    }
+  end)
+end
+
 return M
