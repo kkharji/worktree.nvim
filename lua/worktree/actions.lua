@@ -464,7 +464,7 @@ picker.delete_branch = function()
   }
 end
 
-picker.edit = function(_)
+picker.edit_branch = function(_)
   local insert = vim.fn.mode() == "i"
   local entry = s.get_selected_entry()
   if insert then
@@ -479,7 +479,7 @@ picker.edit = function(_)
   end)
 end
 
-picker.merge = function(_)
+picker.merge_branch = function(_)
   local entry = s.get_selected_entry()
 end
 
