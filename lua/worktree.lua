@@ -18,7 +18,7 @@ M.create = function(cwd, cb)
       config = { insert = true, start_pos = { 1, 3 }, height = "20%" },
       on_exit = function(_, abort, buflines)
         if abort then
-          return (cb or function() end)()
+          return (cb or function() end)(false)
         end
         Worktree:new(buflines, cwd, choice):create(cb)
       end,

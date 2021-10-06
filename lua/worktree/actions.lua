@@ -1,7 +1,6 @@
 local msgs = require "worktree.msgs"
 local fmt = require "worktree.fmt"
 local menu = require "worktree.menu"
-R "worktree.fmt"
 local M = {}
 
 ---TODO: refactor, move assert stuff to assert? and have three main sections of jobs: set, get, perform
@@ -433,7 +432,7 @@ perform.create_branch = function(wt, cb)
   -- set_upstream:and_then_on_success(set_description)
   set_description:after_success(vim.schedule_wrap(function()
     print(string.format("created '%s' and switched to it", wt.name));
-    (cb or function() end)()
+    (cb or function() end)(wt)
   end))
 
   perform.pre_post_switch(wt.name, wt.cwd, checkout):start()
@@ -513,9 +512,13 @@ local picker = M.picker
 local s = require "telescope.actions.state"
 local a = require "telescope.actions"
 
-picker.delete_branch = function()
+picker.delete_branch = function(_)
   local entry = s.get_selected_entry()
-  vim.cmd "stopinsert"
+  local insert = vim.fn.mode() == "i"
+  if insert then
+    vim.cmd "stopinsert"
+  end
+
   menu {
     heading = "Delete " .. entry.subject .. "?",
     size = { 3, 30 },
@@ -525,11 +528,19 @@ picker.delete_branch = function()
       { text = "No", delete = false },
     },
     on_close = function(_, choice)
-      if choice ~= nil and choice.delete then
-        perform.delete(entry.name, entry.current, entry.cwd)
-      end
       require("telescope.builtin").resume()
-      vim.cmd "startinsert"
+      vim.wait(10)
+
+      if choice ~= nil and choice.delete then
+        local picker = s.get_current_picker(vim.api.nvim_get_current_buf())
+        picker:delete_selection(function()
+          perform.delete(entry.name, entry.current, entry.cwd)
+        end)
+      end
+
+      if insert then
+        vim.cmd "startinsert"
+      end
     end,
   }
 end
@@ -549,11 +560,25 @@ picker.create_branch = function(bufnr)
     vim.cmd "stopinsert"
   end
 
-  require("worktree").create(nil, function()
+  require("worktree").create(nil, function(_)
     require("telescope.builtin").resume { cache_index = 2 }
+
     if insert then
       vim.cmd "startinsert"
     end
+
+    --- TODO: Add new branch to the menu
+    vim.wait(10)
+    -- if entry then
+    --   local picker = s.get_current_picker(vim.api.nvim_get_current_buf())
+    --   picker:add_selection {
+    --     title = entry.title,
+    --     subject = fmt.get_subject(entry.title) or entry.title,
+    --     scope = (fmt.get_type(entry.title) or "none") .. "/" .. (fmt.get_scope(entry.title) or "*"),
+    --     current = entry.name == get.name(entry.cwd):sync()[1],
+    --     cwd = entry.cwd,
+    --   }
+    -- end
   end)
 end
 
