@@ -111,7 +111,8 @@ end
 
 M.switcher = function(opts)
   -- local dd = dropdown { layout_config = { width = 0.4, height = 0.2 } }
-  local parts = vim.split(vim.loop.cwd(), "/")
+  local cwd = vim.loop.cwd()
+  local parts = vim.split(cwd, "/")
   local name = parts[#parts]
   picker(vim.tbl_extend("keep", opts or {}, dropdown), {
     prompt_prefix = "",
@@ -141,7 +142,7 @@ M.switcher = function(opts)
       return true
     end,
     finder = finder {
-      results = get.branches(vim.loop.cwd()),
+      results = get.branches(cwd),
       entry_maker = function(entry)
         entry.ordinal = entry.name
         entry.display = function(e)

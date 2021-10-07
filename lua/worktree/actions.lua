@@ -23,9 +23,11 @@ get.branches = function(cwd)
     .. "%(committerdate:format-local:%Y/%m/%d %H:%M:%S)"
 
   local output, _ = Job { "git", "for-each-ref", "--perl", "--format", format, cwd = cwd, sync = true }
+
   for i, line in ipairs(output) do
     output[i] = fmt.parse_branch_info_line(line, cwd)
   end
+
   return output
 end
 
@@ -573,7 +575,7 @@ picker.create_branch = function(bufnr)
     end
 
     --- TODO: Add new branch to the menu
-    vim.wait(10)
+    -- vim.wait(10)
     -- if entry then
     --   local picker = s.get_current_picker(vim.api.nvim_get_current_buf())
     --   picker:add_selection {
