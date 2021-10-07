@@ -129,6 +129,10 @@ M.switcher = function(opts)
       map("i", "<C-s>", pactions.merge_branch)
       map("n", "m", pactions.merge_branch)
 
+      map("i", "<C-o>", pactions.open_pr_in_web)
+      map("n", "<C-o>", pactions.open_pr_in_web)
+      map("n", "<leader>so", pactions.open_pr_in_web)
+
       map("i", "<C-e>", pactions.edit_branch)
       map("n", "e", pactions.edit_branch)
 

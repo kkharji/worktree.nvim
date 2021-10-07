@@ -136,10 +136,15 @@ get.last_stash_for = function(branch_name, cwd)
   end
 
   if #stash_list >= 2 then
-    print "There are multiple stashs avalible, please use :Telescope git_stash. using last stash"
+    print "There are multiple stashs available, please use :Telescope git_stash. using last stash"
   end
 
   return string.match(stash_list[1], "(%S+):")
+end
+
+get.open_prs = function(cwd)
+  local args = { "gh", "pr", "status", "--json", "url", "--json", "headRefName", cwd = cwd }
+  return Job(args)
 end
 
 M.set = {}
@@ -595,6 +600,37 @@ picker.edit_branch = function(bufnr)
     end
     require("telescope.builtin").resume()
   end)
+end
+
+picker.open_pr_in_web = function(_)
+  local entry = s.get_selected_entry()
+  local online = assert.is_online(true)
+  local get_open_prs = get.open_prs(entry.cwd)
+  online:after_failure(function()
+    print("Failed to check whether " .. entry.name .. " has an open pr or not.")
+  end)
+  online:and_then_on_success(get_open_prs)
+  get_open_prs:after(function(j, code)
+    if code ~= 0 then
+      return print "Failed to query open pr from github"
+    end
+    local res = vim.json.decode(table.concat(j._stdout_results, "\n")).createdBy
+
+    local url
+    for _, info in ipairs(res) do
+      if info.headRefName == entry.name then
+        url = info.url
+        break
+      end
+    end
+
+    if not url then
+      return print("No PR found for " .. entry.name .. " (@)")
+    end
+    --- TODO: support other platforms
+    Job({ "open", url }):start()
+  end)
+  online:start()
 end
 
 picker.merge_branch = function(_)
