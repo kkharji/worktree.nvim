@@ -5,13 +5,7 @@ local M = {}
 
 ---TODO: refactor, move assert stuff to assert? and have three main sections of jobs: set, get, perform
 
-local Job = function(o)
-  local job = require("plenary.job"):new(o)
-  if o.sync then
-    return job:sync()
-  end
-  return job
-end
+local Job = require "worktree.actions.wrapper"
 
 M.get = {}
 local get = M.get

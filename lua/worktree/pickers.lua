@@ -1,7 +1,3 @@
-if not pcall(require, "telescope") then
-  vim.cmd [[ echom 'Cannot load `telescope`' ]]
-  return
-end
 R "worktree.actions"
 local M = {}
 local a = require "telescope.actions"
