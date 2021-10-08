@@ -17,6 +17,30 @@ local Worktree = {
   end,
 }
 
+---@param arg string[]
+---@param cwd string @current working directory to repo
+---@overload fun(self: WorkTree, name: string, cwd: string): WorkTree
+---@return WorkTree
+Worktree.new = function(self, arg, cwd, typeinfo)
+  local o = { cwd = cwd }
+
+  if type(arg) == "table" then
+    local p = self:parse(arg, typeinfo)
+    o.name, o.title, o.body, o.type = p.name, p.title, p.body, p.type
+  end
+
+  if type(arg) == "string" then
+    o.name = arg == "current" and get.name(cwd):sync()[1] or arg
+    o.title = fmt.into_title(o.name)
+    o.body = get.description(o.name, cwd):sync()
+  end
+
+  o.has_pr = assert.has_origin_version(o.name, o.cwd)
+  o.upstream = get.remote_name(o.cwd)
+
+  return setmetatable(o, self)
+end
+
 Worktree.__index = Worktree
 
 ---Format buffer according with branch configurations
@@ -154,30 +178,6 @@ Worktree.merge = function(self, type, target, cb)
   end))
 
   fetch:start()
-end
-
----@param arg string[]
----@param cwd string @current working directory to repo
----@overload fun(self: WorkTree, name: string, cwd: string): WorkTree
----@return WorkTree
-Worktree.new = function(self, arg, cwd, typeinfo)
-  local o = { cwd = cwd }
-
-  if type(arg) == "table" then
-    local p = self:parse(arg, typeinfo)
-    o.name, o.title, o.body, o.type = p.name, p.title, p.body, p.type
-  end
-
-  if type(arg) == "string" then
-    o.name = arg == "current" and get.name(cwd):sync()[1] or arg
-    o.title = fmt.into_title(o.name)
-    o.body = get.description(o.name, cwd):sync()
-  end
-
-  o.has_pr = assert.has_origin_version(o.name, o.cwd)
-  o.upstream = get.remote_name(o.cwd)
-
-  return setmetatable(o, self)
 end
 
 return Worktree
