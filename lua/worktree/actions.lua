@@ -1,6 +1,7 @@
 local msgs = require "worktree.msgs"
 local fmt = require "worktree.fmt"
 local menu = require "worktree.menu"
+local parse = require "worktree.parse"
 local M = {}
 
 ---TODO: refactor, move assert stuff to assert? and have three main sections of jobs: set, get, perform
@@ -101,15 +102,12 @@ get.commits = function(branch_name, cwd)
   return Job(args)
 end
 
-get.default_branch_name = function(has_remote, cwd)
-  local default = ""
-  if has_remote then
-    default = vim.loop.fs_stat(cwd .. "/.git/refs/heads/master") and "master" or "main"
-  else
+get.default_branch_name = function(cwd)
+  local default = vim.loop.fs_stat(cwd .. "/.git/refs/heads/master") and "master" or "main"
+  if default == "main" then
     local res, _ = Job { "git", "config", "--global", "init.defaultBranch", sync = true }
     default = res[1]
   end
-
   return default
 end
 
@@ -280,33 +278,31 @@ end
 
 ---Squash and merge commits from a given branch_name.
 ---TODO: make it accept target
----@param branch_name string
----@param cwd string
+---@param self WorkTree
 ---@return Job
-perform.squash = function(branch_name, cwd)
-  local name = branch_name == "default" and get.default_branch_name(false, cwd)
-  local args = { "git", "merge", "--squash", name, cwd = cwd, on_exit = msgs.squash }
+perform.squash = function(self)
+  local args = { "git", "merge", "--squash", self.name, cwd = self.cwd, on_exit = msgs.squash }
   return Job(args)
 end
 
-perform.rebase = function(branch_name, cwd)
-  local args = { "git", "rebase", branch_name, on_exit = msgs.rebase, cwd = cwd }
+perform.rebase = function(self)
+  local args = { "git", "rebase", self.name, on_exit = msgs.rebase, cwd = self.cwd }
   return Job(args)
 end
 
-perform.merge = function(branch_name, body, cwd)
-  local args = { "git", "merge", "--no-ff", "-m", "merge: " .. branch_name }
-  if body ~= "" then
-    for _, line in ipairs(vim.split(body, "\n")) do
+perform.merge = function(self)
+  local args = { "git", "merge", "--no-ff", "-m", "merge: " .. self.name }
+  if self.body ~= "" then
+    for _, line in ipairs(vim.split(self.body, "\n")) do
       if line ~= "" then
         table.insert(args, "-m")
         table.insert(args, line)
       end
     end
   end
-  table.insert(args, branch_name)
+  table.insert(args, self.name)
   args.on_exit = msgs.merge
-  args.cwd = cwd
+  args.cwd = self.cwd
   return Job(args)
 end
 
@@ -481,20 +477,20 @@ perform.pr_open = function(wt, cb)
   wt.has_pr = true
 end
 
-perform.pr_squash = function(body, cwd)
-  local args = { "gh", "pr", "merge", "--delete-branch", "--squash", "--body", body, cwd = cwd }
+perform.pr_squash = function(self)
+  local args = { "gh", "pr", "merge", "--delete-branch", "--squash", "--body", self.body, cwd = self.cwd }
   args.on_exit = msgs.pr_squash
   return Job(args)
 end
 
-perform.pr_rebase = function(body, cwd)
-  local args = { "gh", "pr", "merge", "--rebase", "--delete-branch", "--body", body, cwd = cwd }
+perform.pr_rebase = function(self)
+  local args = { "gh", "pr", "merge", "--rebase", "--delete-branch", "--body", self.body, cwd = self.cwd }
   args.on_exit = msgs.pr_rebase
   return Job(args)
 end
 
-perform.pr_merge = function(body, cwd)
-  local args = { "gh", "pr", "merge", "--merge", "--delete-branch", "--body", body, cwd = cwd }
+perform.pr_merge = function(self)
+  local args = { "gh", "pr", "merge", "--merge", "--delete-branch", "--body", self.body, cwd = self.cwd }
   args.on_exit = msgs.pr_rebase
   return Job(args)
 end
@@ -606,31 +602,60 @@ picker.open_pr_in_web = function(_)
     print("Failed to check whether " .. entry.name .. " has an open pr or not.")
   end)
   online:and_then_on_success(get_open_prs)
-  get_open_prs:after(function(j, code)
-    if code ~= 0 then
-      return print "Failed to query open pr from github"
-    end
-    local res = vim.json.decode(table.concat(j._stdout_results, "\n")).createdBy
-
-    local url
-    for _, info in ipairs(res) do
-      if info.headRefName == entry.name then
-        url = info.url
-        break
-      end
-    end
-
-    if not url then
-      return print("No PR found for " .. entry.name .. " (@)")
+  get_open_prs:after(parse.has_pr(entry.name, function(info)
+    if not info.url then
+      return print("No PR found for " .. info.name .. " (@)")
     end
     --- TODO: support other platforms
-    Job({ "open", url }):start()
-  end)
+    Job({ "open", info.url }):start()
+  end))
   online:start()
 end
 
 picker.merge_branch = function(_)
   local entry = s.get_selected_entry()
+  local insert = vim.fn.mode() == "i"
+  local wt = require("worktree.model"):new(entry.name, entry.cwd)
+  -- Ask what branch to merge to if it doesn't have a PR, and if it does just
+  -- let github handle everything.
+  -- or if current branch defer from target branch,
+  menu {
+    heading = "Choose merge type for " .. entry.subject,
+    size = { 3, 30 },
+    align_choice = "center",
+    choices = {
+      { text = "Squash" },
+      { text = "Merge" },
+      { text = "Rebase" },
+    },
+    on_close = function(_, choice)
+      if choice == nil then
+        return print "aborting merge!!"
+      end
+      local targets = get.branches(entry.cwd)
+      menu {
+        heading = "Choose target Branch to merge into",
+        size = { 5, 50 },
+        align_choice = "left",
+        choices = targets,
+        on_close = function(_, branch)
+          if not branch then
+            require("telescope.builtin").resume()
+            return
+          end
+          wt:merge(choice.text, branch.text, function()
+            require("telescope.builtin").resume()
+            if insert then
+              vim.cmd "startinsert"
+            end
+            return
+          end)
+        end,
+      }
+      --- ASK which branch to merge into? current or default
+      -- wt:merge(choice.text,)
+    end,
+  }
 end
 
 return M

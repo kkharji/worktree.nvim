@@ -1,6 +1,7 @@
 local actions = require "worktree.actions"
 local assert, perform, get, set = actions.assert, actions.perform, actions.get, actions.set
 local fmt = require "worktree.fmt"
+local parse = require "worktree.parse"
 
 ---@class WorkTree
 ---@field name string
@@ -103,73 +104,55 @@ Worktree.create = perform.create_branch
 ---@param cb any
 Worktree.to_pr = perform.pr_open
 
+local do_locally = function(self, type, checkout, cb)
+  local run = perform[type](self)
+
+  if not run then
+    error(type .. " is not supported.")
+  end
+  checkout:and_then_on_success(run)
+
+  if type == "squash" then
+    local commit = perform.commit(self.title, self.body, self.cwd, "squash")
+    run:and_then_on_success(commit)
+    commit:after(vim.schedule_wrap((cb or function() end)))
+  else
+    run:after(vim.schedule_wrap((cb or function() end)))
+  end
+  checkout:start()
+end
+
 ---@param self WorkTree
 ---@param target string
 ---@param type '"squash"' | '"rebase"' | '"merge"'
-Worktree.merge = function(self, type, target)
+Worktree.merge = function(self, type, target, cb)
+  local isonline = assert.is_online(true)
+  local fetch = perform.fetch(self.cwd)
+  local has_pr = get.open_prs(self.cwd)
+  local checkout = perform.checkout(target, self.cwd)
+
   if target == "default" then
-    target = get.default_branch_name(self.has_pr, self.cwd)
+    target = get.default_branch_name(self.cwd)
   end
 
-  return self["merge_" .. type](self, target)
-end
+  isonline:and_then_on_success(fetch)
+  isonline:after_failure(function()
+    do_locally(self, type, checkout, cb)
+  end)
 
-Worktree.fetch = function(self)
-  local job = assert.is_online(true)
-  job:and_then_on_success(perform.fetch(self.cwd))
-  return job
-end
+  fetch:and_then(has_pr)
 
----Squash and merge branch to target.
----@param target string
---TODO: should delete branch automatically
-Worktree.merge_squash = function(self, target)
-  local fetch = self:fetch()
-  if not self.has_pr then
-    local checkout = perform.checkout(target, self.cwd)
-    local merge = perform.squash_and_merge(self.name, self.cwd)
-    local commit = perform.commit(self.title, self.body, self.cwd, "squash")
-    fetch:and_then(checkout)
-    checkout:and_then_on_success(merge)
-    merge:and_then_on_success(commit)
-  else
-    local gh_action = perform.pr_squash(self.body, self.cwd)
-    fetch:and_then(gh_action)
-  end
-  fetch:start()
-end
+  has_pr:after(parse.has_pr(self.name, function(match)
+    if match.name then
+      local gh_action = perform["pr_" .. type](self)
+      gh_action:after(vim.schedule_wrap((cb or function() end)))
+      --- TODO: merge locally.
+      return gh_action:start()
+    end
 
----Rebase branch or remote branch using gituhb
----@param target string
---TODO: should delete branch automatically
-Worktree.merge_rebase = function(self, target)
-  local fetch = self:fetch()
-  if not self.has_pr then
-    local checkout = perform.checkout(target, self.cwd)
-    local rebase = perform.rebase(self.name, self.cwd)
-    fetch:and_then(checkout)
-    checkout:and_then_on_success(rebase)
-  else
-    local gh_action = perform.pr_rebase(self.body, self.cwd)
-    fetch:and_then(gh_action)
-  end
-  fetch:start()
-end
+    do_locally(self, type, checkout, cb)
+  end))
 
----Merge with a commit
----@param target string
---TODO: should delete branch automatically
-Worktree.merge_merge = function(self, target)
-  local fetch = self:fetch()
-  if not self.has_pr then
-    local checkout = perform.checkout(target, self.cwd)
-    local merge = perform.merge(self.name, self.body, self.cwd)
-    fetch:and_then(checkout)
-    checkout:and_then_on_success(merge)
-  else
-    local gh_action = perform.pr_merge(self.body, self.cwd)
-    fetch:and_then(gh_action)
-  end
   fetch:start()
 end
 
