@@ -64,7 +64,7 @@ Worktree.parse = function(_, bufferlines, typeinfo)
   }
 
   if typeinfo then
-    local type = typeinfo.title:lower()
+    local type = typeinfo.prefix:lower()
     if p.title:match ":" then
       local parts = vim.split(p.title, ":")
       p.title = string.format("%s(%s): %s", type, parts[1], parts[2])
