@@ -1,4 +1,7 @@
 local M = {}
+M.pull = {
+  err = "failed to merge remote to branch",
+}
 
 M.checkout = {
   err = "Failed to checked out/created a new branch",

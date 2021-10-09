@@ -108,15 +108,17 @@ Worktree.update = function(self, buflines, cb)
   self.title = diff.title and change.title or self.title
   self.body = diff.body and change.body or self.body
 
-  if self.has_pr then
-    perform.pr_update({
-      title = diff.title and self.title or nil,
-      body = diff.body and self.body or nil,
-      cb = cb,
-    }):start()
-  else
-    (cb or function() end)()
-  end
+  get.pr_info(self.cwd, function(info)
+    if info and (info.title ~= info.title or info.body ~= self.body) then
+      perform.pr_update {
+        title = self.title,
+        body = self.body,
+        cb = cb,
+      }
+    else
+      (cb or function() end)()
+    end
+  end):start()
 end
 
 ---Create new branch through checking out master, merging recent remote,
@@ -129,19 +131,21 @@ Worktree.create = perform.create_branch
 Worktree.to_pr = perform.pr_open
 
 local do_locally = function(self, type, checkout, cb)
+  local cb = cb or function() end
   local run = perform[type](self)
 
   if not run then
-    error(type .. " is not supported.")
+    print(type .. " is not supported.")
+    return
   end
   checkout:and_then_on_success(run)
 
   if type == "squash" then
-    local commit = perform.commit(self.title, self.body, self.cwd, "squash")
+    local commit = perform.commit(self, "squash")
     run:and_then_on_success(commit)
-    commit:after(vim.schedule_wrap((cb or function() end)))
+    commit:after(vim.schedule_wrap(cb))
   else
-    run:after(vim.schedule_wrap((cb or function() end)))
+    run:after(vim.schedule_wrap(cb))
   end
   checkout:start()
 end
@@ -152,32 +156,39 @@ end
 Worktree.merge = function(self, type, target, cb)
   local isonline = assert.is_online(true)
   local fetch = perform.fetch(self.cwd)
-  local has_pr = get.open_prs(self.cwd)
   local checkout = perform.checkout(target, self.cwd)
-
-  if target == "default" then
-    target = get.default_branch_name(self.cwd)
-  end
+  target = target == "default" and get.default_branch_name(self.cwd) or target
+  cb = vim.schedule_wrap(cb or function() end)
 
   isonline:and_then_on_success(fetch)
-  isonline:after_failure(function()
-    do_locally(self, type, checkout, cb)
-  end)
-
-  fetch:and_then(has_pr)
-
-  has_pr:after(parse.has_pr(self.name, function(match)
-    if match.name then
-      local gh_action = perform["pr_" .. type](self)
-      gh_action:after(vim.schedule_wrap((cb or function() end)))
-      --- TODO: merge locally.
-      return gh_action:start()
+  fetch:and_then_wrap(get.pr_info(self.cwd, function(info)
+    if info == nil then
+      return do_locally(self, type, checkout, cb)
     end
+    local push = perform.push(self.name, self.cwd)
+    local merge = perform.pr_merge(self, type)
 
-    do_locally(self, type, checkout, cb)
+    push:and_then_on_success(merge)
+    merge:and_then_on_success_wrap(get.parent(self, function(parent)
+      if not parent then
+        print "parent not found"
+        return
+      end
+      print "reflect changes locally"
+      local switch = perform.switch { name = parent, cwd = self.cwd }
+      local pull = perform.pull(parent)
+      switch:and_then_on_success(pull)
+      pull:and_then_on_success(cb)
+    end))
+    push:start()
   end))
 
-  fetch:start()
+  isonline:after_failure(function()
+    print "using local"
+    -- do_locally(self, type, checkout, cb)
+  end)
+
+  isonline:start()
 end
 
 return Worktree

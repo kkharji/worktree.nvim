@@ -21,4 +21,18 @@ M.has_pr = function(name, cb)
   end
 end
 
+M.get_parent = function(name, str)
+  str = string.match(str, "].*")
+  local lines = vim.split(str, "\n")
+  local possible = {}
+  for _, line in ipairs(lines) do
+    if not string.match(vim.trim(line), "!") and string.match(vim.trim(line), "*") then
+      if not string.match(line, name) then
+        possible[#possible + 1] = line:match "%[(%S+)]"
+      end
+    end
+  end
+  return I(possible[1])
+end
+
 return M

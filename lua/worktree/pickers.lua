@@ -71,6 +71,7 @@ M.pick_branch_merge_type = function(cb)
   picker(dropdown, {
     prompt_title = "Pick Merge type",
     prompt_prefix = "",
+    initial_mode = "normal",
     sorter = sorter {},
     finder = finder {
       results = {
@@ -129,6 +130,10 @@ M.switcher = function(opts)
       map("i", "<C-o>", pactions.open_pr_in_web)
       map("n", "<C-o>", pactions.open_pr_in_web)
       map("n", "<leader>so", pactions.open_pr_in_web)
+
+      map("i", "<C-p>", pactions.create_pr)
+      map("n", "<C-p>", pactions.create_pr)
+      map("n", "<leader>gp", pactions.create_pr)
 
       map("i", "<C-e>", pactions.edit_branch)
       map("n", "e", pactions.edit_branch)

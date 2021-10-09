@@ -29,8 +29,30 @@ end
 ---Job to get pr info
 ---@param cwd string
 ---@return Job
-get.pr_info = function(cwd)
-  return Job { "gh", "pr", "view", "--json", "title", "--json", "body", cwd = cwd }
+get.pr_info = function(cwd, cb)
+  local job = Job { "gh", "pr", "view", "--json", "title", "--json", "body", cwd = cwd }
+  if cb then
+    job:after(function(j, code)
+      if code ~= 0 then
+        cb(nil)
+      end
+      cb(vim.json.decode(table.concat(j:result(), "\n")))
+    end)
+  end
+
+  return job
+end
+
+get.parent = function(self, cb)
+  local args = { "git", "show-branch", cwd = self.cwd }
+  args.on_exit = function(j, c)
+    if c ~= 0 then
+      return cb(nil)
+    end
+    cb(parse.get_parent(self.name, table.concat(j:result(), "\n")))
+  end
+
+  return Job(args)
 end
 
 ---Check whether a branch has a upstream/origin repo
@@ -306,6 +328,23 @@ perform.merge = function(self)
   return Job(args)
 end
 
+perform.pull = function(branch_name)
+  local job = Job { "git", "pull", "origin", branch_name, on_exit = msgs.pull }
+  return job
+end
+
+perform.switch = function(self)
+  return perform.pre_post_switch(
+    self.name,
+    self.cwd,
+    Job {
+      "git",
+      "switch",
+      self.name,
+      on_exit = msgs.switch,
+    }
+  ):start()
+end
 ---Fetch new changes from remote.
 -- TODO: make it ignore fetching if not remote is avaliable
 -- TODO: which remote?
@@ -322,8 +361,7 @@ end
 ---@param cwd string
 ---@return Job
 perform.push = function(branch_name, cwd)
-  local remote = get.remote_name(cwd)
-  local args = { "git", "push", "-u", remote, branch_name, cwd = cwd, on_exit = msgs.push }
+  local args = { "git", "push", "-u", "origin", branch_name, cwd = cwd, on_exit = msgs.push }
   return Job(args)
 end
 
@@ -348,15 +386,13 @@ perform.checkout = function(branch_name, cwd)
 end
 
 ---Make a commit
----@param heading string @commit heading
----@param body string @commit body
----@param cwd string @path where the git command should be executed
+---@param self WorkTree
+---@param special string
 ---@return Job
-perform.commit = function(heading, body, cwd, special)
+perform.commit = function(self, special)
   local on_exit = special and msgs[special] or msgs.new_commit
-  local args = { "git", "commit", "-m", heading, cwd = cwd, on_exit = on_exit }
-  body = vim.split(body, "\n")
-  for _, line in ipairs(body) do
+  local args = { "git", "commit", "-m", self.title, cwd = self.cwd, on_exit = on_exit }
+  for _, line in ipairs(self.body) do
     if line ~= "" then
       args[#args + 1] = "-m"
       args[#args + 1] = line
@@ -441,17 +477,18 @@ end
 -- fails when the branch is already connected to a pull request
 perform.pr_open = function(wt, cb)
   cb = cb and cb or function() end
-  local create = Job {
+  local create = {
     "gh",
     "pr",
     "create",
     "--title",
     wt.title,
     "--body",
-    wt.body,
+    table.concat(wt.body, "\n"),
     cwd = wt.cwd,
     on_exit = msgs.pr_open,
   }
+  create = Job(create)
   local fetch = perform.fetch(wt.cwd)
   local push = perform.push(wt.name, wt.cwd)
   local fork = perform.gh_fork(wt.cwd)
@@ -460,12 +497,12 @@ perform.pr_open = function(wt, cb)
   fetch:and_then_on_success(push)
 
   push:and_then_on_success(create)
-  create:after(cb)
+  create:after(vim.schedule_wrap(cb))
 
   push:after_failure(function()
     print "No write access, forking and creating pr instead ..."
     fork:and_then_on_success(create)
-    create:after(cb)
+    create:after(vim.schedule_wrap(cb))
     fork:after_failure(function()
       error "Failed to fork repo ..."
     end)
@@ -477,21 +514,11 @@ perform.pr_open = function(wt, cb)
   wt.has_pr = true
 end
 
-perform.pr_squash = function(self)
-  local args = { "gh", "pr", "merge", "--delete-branch", "--squash", "--body", self.body, cwd = self.cwd }
-  args.on_exit = msgs.pr_squash
-  return Job(args)
-end
-
-perform.pr_rebase = function(self)
-  local args = { "gh", "pr", "merge", "--rebase", "--delete-branch", "--body", self.body, cwd = self.cwd }
-  args.on_exit = msgs.pr_rebase
-  return Job(args)
-end
-
-perform.pr_merge = function(self)
-  local args = { "gh", "pr", "merge", "--merge", "--delete-branch", "--body", self.body, cwd = self.cwd }
-  args.on_exit = msgs.pr_rebase
+perform.pr_merge = function(self, type)
+  local body = table.concat(self.body, "\n")
+  local args = { "gh", "pr", "merge", "--" .. type, "--body", body, cwd = self.cwd }
+  I(args)
+  args.on_exit = msgs["pr_" .. type]
   return Job(args)
 end
 
@@ -545,8 +572,7 @@ end
 picker.switch_branch = function(bufnr)
   local entry = s.get_selected_entry()
   a.close(bufnr)
-  local switch = Job { "git", "switch", entry.name, on_exit = msgs.switch }
-  perform.pre_post_switch(entry.name, entry.cwd, switch):start()
+  return perform.switch(entry):start()
 end
 
 picker.create_branch = function(bufnr)
@@ -594,6 +620,14 @@ picker.edit_branch = function(bufnr)
   end)
 end
 
+picker.create_pr = function(bufnr)
+  local entry = s.get_selected_entry()
+  a.close(bufnr)
+  require("worktree.model"):new(entry.name, entry.cwd):to_pr(function()
+    require("telescope.builtin").resume()
+  end)
+end
+
 picker.open_pr_in_web = function(_)
   local entry = s.get_selected_entry()
   local online = assert.is_online(true)
@@ -616,6 +650,7 @@ picker.merge_branch = function(_)
   local entry = s.get_selected_entry()
   local insert = vim.fn.mode() == "i"
   local wt = require("worktree.model"):new(entry.name, entry.cwd)
+  local targets = get.branches(entry.cwd)
   -- Ask what branch to merge to if it doesn't have a PR, and if it does just
   -- let github handle everything.
   -- or if current branch defer from target branch,
@@ -632,7 +667,11 @@ picker.merge_branch = function(_)
       if choice == nil then
         return print "aborting merge!!"
       end
-      local targets = get.branches(entry.cwd)
+
+      table.sort(targets, function(a, b)
+        return #a.text < #b.text
+      end)
+
       menu {
         heading = "Choose target Branch to merge into",
         size = { 5, 50 },
@@ -643,7 +682,7 @@ picker.merge_branch = function(_)
             require("telescope.builtin").resume()
             return
           end
-          wt:merge(choice.text, branch.text, function()
+          wt:merge(choice.text:lower(), branch.text, function()
             require("telescope.builtin").resume()
             if insert then
               vim.cmd "startinsert"
