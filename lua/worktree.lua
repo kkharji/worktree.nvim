@@ -1,6 +1,6 @@
 local Worktree = require "worktree.model"
 local pickers = require "worktree.pickers"
-local menu = require "worktree.menu"
+local config = require "worktree.config"
 local user = _G.user
 if not user then
   error "User not found"
@@ -8,64 +8,16 @@ end
 local Win = user.ui.float
 local M = {}
 
-M.commits = {
-  all = {
-    {
-      prefix = "feat",
-      title = "Feature",
-      desc = "Add new feature",
-    },
-    {
-      prefix = "perf",
-      title = "Performance",
-      desc = "Improve performance",
-    },
-    {
-      prefix = "chore",
-      title = "Chore",
-      desc = "Make changes not related to codebase",
-      not_branch_type = true,
-    },
-    {
-      prefix = "enh",
-      title = "Enhance",
-      desc = "Enhance an existing feature or scope.",
-    },
-    {
-      prefix = "ref",
-      title = "Refactor",
-      desc = "Make changes without effecting how things work",
-    },
-    {
-      prefix = "fix",
-      title = "Fix",
-      desc = "Fix a bug related to feature.",
-    },
-    {
-      prefix = "doc",
-      title = "Docs",
-      desc = "Make changes on codebase documentation",
-    },
-    {
-      prefix = "ci",
-      title = "Continues Integration",
-      desc = "Make changes on CI Jobs",
-    },
-    branch_template = {
-      "### Purpose",
-      "",
-    },
-  },
-}
-
 ---Create new branch from current working directory
 ---@param cwd string @current working directory
 M.create = function(cwd, cb)
   cwd = cwd or vim.loop.cwd()
-  local choices = M.commits[vim.loop.cwd()] or M.commits.all
+  local choices = config.commits[vim.loop.cwd()] or config.commits.all
   pickers.pick_branch_type {
-    title = "Pick Branch Type",
-    choices = choices,
+    title = "Pick Branch Type:",
+    choices = vim.tbl_filter(function(choice)
+      return not choice.not_branch_type
+    end, choices),
     on_submit = function(choice)
       Win {
         heading = choice.description,
@@ -160,9 +112,9 @@ end
 M.switcher = require("worktree.pickers").switcher
 
 M.commit_changes = function(amend)
-  local choices = M.commits[vim.loop.cwd()] or M.commits.all
+  local choices = config.commits[vim.loop.cwd()] or config.commits.all
   pickers.pick_branch_type {
-    title = "Commit Type: ",
+    title = "Commit Type:",
     choices = choices,
     on_submit = function(choice)
       Win {
