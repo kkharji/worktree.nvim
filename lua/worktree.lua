@@ -9,18 +9,18 @@ local M = {}
 
 ---Create new branch from current working directory
 ---@param cwd string @current working directory
-M.create = function(cwd)
+M.create = function(cwd, cb)
   cwd = cwd or vim.loop.cwd()
-  pickers.pick_branch_type("Pick Branch Type > ", function(choice)
+  pickers.pick_branch_type("Pick Branch Type", function(choice)
     Win {
       heading = choice.description,
       content = Worktree:template(),
       config = { insert = true, start_pos = { 1, 3 }, height = "20%" },
       on_exit = function(_, abort, buflines)
         if abort then
-          return
+          return (cb or function() end)(false)
         end
-        Worktree:new(buflines, cwd, choice):create()
+        Worktree:new(buflines, cwd, choice):create(cb)
       end,
     }
   end)
@@ -29,7 +29,7 @@ end
 ---Edit details
 ---@param cwd string @current working directory
 ---@param branch_name string @branch name
-M.edit = function(branch_name, cwd)
+M.edit = function(branch_name, cwd, cb)
   cwd = cwd or vim.loop.cwd()
   local name = branch_name and branch_name or "current"
   local worktree = Worktree:new(name, cwd)
@@ -39,9 +39,11 @@ M.edit = function(branch_name, cwd)
     config = { insert = false, start_pos = { 1, 7 }, height = "55%" },
     on_exit = function(_, abort, content)
       if abort then
-        return
+        if cb then
+          cb()
+        end
       end
-      worktree:update(content)
+      worktree:update(content, cb)
     end,
   }
 end
@@ -98,5 +100,7 @@ M.merge = function(branch_name, target, cwd)
     }
   end)
 end
+
+M.switcher = require("worktree.pickers").switcher
 
 return M
