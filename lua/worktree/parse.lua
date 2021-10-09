@@ -32,7 +32,7 @@ M.get_parent = function(name, str)
       end
     end
   end
-  return I(possible[1])
+  return possible[1]
 end
 
 return M

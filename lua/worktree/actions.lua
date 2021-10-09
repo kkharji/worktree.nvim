@@ -516,7 +516,6 @@ end
 
 perform.pr_merge = function(self, type)
   local args = { "gh", "pr", "merge", "--" .. type, "--body", self.body, cwd = self.cwd }
-  I(args)
   args.on_exit = msgs["pr_" .. type]
   return Job(args)
 end
