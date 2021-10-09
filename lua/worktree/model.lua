@@ -107,7 +107,7 @@ Worktree.update = function(self, buflines, cb)
   self.body = diff.body and change.body or self.body
 
   get.pr_info(self.cwd, function(info)
-    if not info and info.title == info.title and info.body == self.body then
+    if not info or (info.title == info.title and info.body == self.body) then
       return cb()
     end
     perform.pr_update({ title = self.title, body = self.body, cb = cb }):start()

@@ -19,6 +19,9 @@ date.since = function(ymdhms)
   local parts = vim.split(ymdhms, " ")
   local date = parts[1]
   local time = parts[2]
+  if not time then
+    return ""
+  end
   local year, month, day = unpack(vim.split(date, "/"))
   local hour, min, sec = unpack(vim.split(time, ":"))
 

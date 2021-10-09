@@ -34,8 +34,9 @@ get.pr_info = function(cwd, cb)
   if cb then
     job:after(function(j, code)
       if code ~= 0 then
-        cb(nil)
+        return cb(nil)
       end
+
       cb(vim.json.decode(table.concat(j:result(), "\n")))
     end)
   end
