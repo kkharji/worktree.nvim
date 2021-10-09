@@ -169,17 +169,20 @@ Worktree.merge = function(self, type, target, cb)
     local merge = perform.pr_merge(self, type)
 
     push:and_then_on_success(merge)
-    merge:and_then_on_success_wrap(get.parent(self, function(parent)
-      if not parent then
-        print "parent not found"
-        return
-      end
-      print "reflect changes locally"
-      local switch = perform.switch { name = parent, cwd = self.cwd }
-      local pull = perform.pull(parent)
-      switch:and_then_on_success(pull)
-      pull:and_then_on_success(cb)
-    end))
+    merge:after_success(function()
+      get.parent(self, function(parent)
+        if not parent then
+          print "parent not found"
+          return
+        end
+        print "reflect changes locally"
+        local switch = perform.switch { name = parent, cwd = self.cwd }
+        local pull = perform.pull(parent)
+        switch:and_then_on_success(pull)
+        pull:and_then_on_success(cb)
+        switch:start()
+      end):start()
+    end)
     push:start()
   end))
 

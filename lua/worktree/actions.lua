@@ -45,12 +45,12 @@ end
 
 get.parent = function(self, cb)
   local args = { "git", "show-branch", cwd = self.cwd }
-  args.on_exit = function(j, c)
+  args.on_exit = vim.schedule_wrap(function(j, c)
     if c ~= 0 then
       return cb(nil)
     end
     cb(parse.get_parent(self.name, table.concat(j:result(), "\n")))
-  end
+  end)
 
   return Job(args)
 end
@@ -107,7 +107,7 @@ end
 get.commits = function(branch_name, cwd)
   local commits = {}
   local curidx = 0
-  local base = get.default_branch_name(assert.has_remote(cwd), cwd)
+  local base = get.default_branch_name(cwd)
   local range = string.format("%s..%s", base, branch_name)
   local args = { "git", "log", range, "--oneline", "--reverse", "--format=X<<%s%n%n%b", cwd = cwd }
   args.on_stdout = function(_, line)
@@ -343,7 +343,7 @@ perform.switch = function(self)
       self.name,
       on_exit = msgs.switch,
     }
-  ):start()
+  )
 end
 ---Fetch new changes from remote.
 -- TODO: make it ignore fetching if not remote is avaliable
@@ -438,7 +438,7 @@ end
 ---@param cb any
 perform.create_branch = function(wt, cb)
   local has_remote = assert.has_remote(wt.cwd)
-  local base = get.default_branch_name(has_remote, wt.cwd)
+  local base = get.default_branch_name(wt.cwd)
 
   local checkout = perform.checkout(base, wt.cwd)
   local merge = perform.merge_remote(base, wt.cwd)
@@ -515,8 +515,7 @@ perform.pr_open = function(wt, cb)
 end
 
 perform.pr_merge = function(self, type)
-  local body = table.concat(self.body, "\n")
-  local args = { "gh", "pr", "merge", "--" .. type, "--body", body, cwd = self.cwd }
+  local args = { "gh", "pr", "merge", "--" .. type, "--body", self.body, cwd = self.cwd }
   I(args)
   args.on_exit = msgs["pr_" .. type]
   return Job(args)
@@ -525,7 +524,7 @@ end
 perform.delete = function(name, current, cwd)
   --- switch to default branch --maybe use switch?
   if current then
-    perform.checkout(get.default_branch_name(true, cwd)):sync()
+    perform.checkout(get.default_branch_name(cwd)):sync()
   end
   Job { "git", "branch", "-D", name, cwd = cwd, on_exit = msgs.delete, sync = true }
 end
