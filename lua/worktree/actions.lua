@@ -1,19 +1,63 @@
 local msgs = require "worktree.msgs"
 local fmt = require "worktree.fmt"
+local menu = require "worktree.menu"
+local parse = require "worktree.parse"
 local M = {}
 
 ---TODO: refactor, move assert stuff to assert? and have three main sections of jobs: set, get, perform
 
-local Job = function(o)
-  local job = require("plenary.job"):new(o)
-  if o.sync then
-    return job:sync()
-  end
-  return job
-end
+local Job = require "worktree.actions.wrapper"
 
 M.get = {}
 local get = M.get
+
+get.branches = function(cwd)
+  local format = "%(HEAD)"
+    .. "%(refname)"
+    .. "%(upstream:lstrip=2)"
+    .. "%(committerdate:format-local:%Y/%m/%d %H:%M:%S)"
+
+  local output, _ = Job { "git", "for-each-ref", "--perl", "--format", format, cwd = cwd, sync = true }
+
+  for i, line in ipairs(output) do
+    output[i] = fmt.parse_branch_info_line(line, cwd)
+  end
+  table.sort(output, function(a, _)
+    return a.current
+  end)
+
+  return output
+end
+
+---Job to get pr info
+---@param cwd string
+---@return Job
+get.pr_info = function(cwd, cb)
+  local job = Job { "gh", "pr", "view", "--json", "title", "--json", "body", cwd = cwd }
+  if cb then
+    job:after(function(j, code)
+      if code ~= 0 then
+        return cb(nil)
+      end
+
+      cb(vim.json.decode(table.concat(j:result(), "\n")))
+    end)
+  end
+
+  return job
+end
+
+get.parent = function(self, cb)
+  local args = { "git", "show-branch", cwd = self.cwd }
+  args.on_exit = vim.schedule_wrap(function(j, c)
+    if c ~= 0 then
+      return cb(nil)
+    end
+    cb(parse.get_parent(self.name, table.concat(j:result(), "\n")))
+  end)
+
+  return Job(args)
+end
 
 ---Check whether a branch has a upstream/origin repo
 ---@param cwd string
@@ -67,7 +111,7 @@ end
 get.commits = function(branch_name, cwd)
   local commits = {}
   local curidx = 0
-  local base = get.default_branch_name(assert.has_remote(cwd), cwd)
+  local base = get.default_branch_name(cwd)
   local range = string.format("%s..%s", base, branch_name)
   local args = { "git", "log", range, "--oneline", "--reverse", "--format=X<<%s%n%n%b", cwd = cwd }
   args.on_stdout = function(_, line)
@@ -84,42 +128,48 @@ get.commits = function(branch_name, cwd)
   return Job(args)
 end
 
-get.default_branch_name = function(has_remote, cwd)
-  local default = ""
-  if has_remote then
-    default = vim.loop.fs_stat(cwd .. "/.git/refs/heads/master") and "master" or "main"
-  else
+get.default_branch_name = function(cwd)
+  local default = vim.loop.fs_stat(cwd .. "/.git/refs/heads/master") and "master" or "main"
+  if default == "main" then
     local res, _ = Job { "git", "config", "--global", "init.defaultBranch", sync = true }
     default = res[1]
   end
-
   return default
 end
 
-get.branches = function(cwd)
-  local res = { { text = "Default", name = get.default_branch_name(false, cwd) } }
-  local output, _ = Job { "git", "branch", cwd = cwd, sync = true }
-  for _, branch in ipairs(output) do
-    branch = vim.trim(branch)
-    if branch:match "*" then
-      branch = vim.trim(branch:gsub("*", ""))
-      res[#res + 1] = {
-        current = true,
-        text = "Current",
-        name = branch,
-        title = fmt.into_title(branch),
-      }
-    elseif branch ~= "master" and branch ~= "name" then
-      local title = fmt.into_title(branch)
-      res[#res + 1] = { text = title, title = title, name = branch }
+get.last_stash_for = function(branch_name, cwd)
+  local name = branch_name
+  local stash_list = {}
+  if name:match "/" then
+    local parts = vim.split(branch_name, "/")
+    name = parts[#parts]
+  end
+  local res, _ = Job { "git", "stash", "list", sync = true, cwd = cwd }
+  for _, stash in ipairs(res) do
+    if string.match(stash, name) then
+      stash_list[#stash_list + 1] = stash
     end
   end
 
-  return res
+  if #stash_list == 0 then
+    return nil
+  end
+
+  if #stash_list >= 2 then
+    print "There are multiple stashs available, please use :Telescope git_stash. using last stash"
+  end
+
+  return string.match(stash_list[1], "(%S+):")
+end
+
+get.open_prs = function(cwd)
+  local args = { "gh", "pr", "status", "--json", "url", "--json", "headRefName", cwd = cwd }
+  return Job(args)
 end
 
 M.set = {}
 local set = M.set
+
 ---Update branch name
 ---@param branch_name string
 ---@param new string
@@ -155,6 +205,11 @@ end
 
 M.assert = {}
 local assert = M.assert
+
+assert.is_dirty = function(cwd)
+  local args = { "git", "status", "--porcelain", cwd = cwd }
+  return Job(args)
+end
 
 ---Check if user is connect to the network
 ---@param as_job any
@@ -202,6 +257,39 @@ end
 M.perform = {}
 local perform = M.perform
 
+---Preserve uncommited changes before switching or create new branch, and after
+---the main job is ran, pop any changes.
+---@param name string
+---@param cwd string
+---@param main Job
+---@return Job
+perform.pre_post_switch = function(name, cwd, main)
+  local last_stash = get.last_stash_for(name, cwd)
+  local is_dirty = assert.is_dirty(cwd)
+  is_dirty:after(function(j, _)
+    local dirty = not vim.tbl_isempty(j._stdout_results)
+    if dirty then
+      local stash = perform.stash_push(cwd)
+      stash:and_then_on_success(main)
+      main:after_success(function()
+        if last_stash then
+          perform.stash_pop(last_stash, cwd):start()
+        end
+      end)
+      stash:start()
+    else
+      main:after_success(function()
+        if last_stash then
+          perform.stash_pop(last_stash, cwd):start()
+        end
+      end)
+      main:start()
+    end
+  end)
+
+  return is_dirty
+end
+
 ---Merge remote change for a branch name if any, skip otherwise
 --TODO: make it skip if not remote branch
 ---@param branch_name string
@@ -216,36 +304,51 @@ end
 
 ---Squash and merge commits from a given branch_name.
 ---TODO: make it accept target
----@param branch_name string
----@param cwd string
+---@param self WorkTree
 ---@return Job
-perform.squash = function(branch_name, cwd)
-  local name = branch_name == "default" and get.default_branch_name(false, cwd)
-  local args = { "git", "merge", "--squash", name, cwd = cwd, on_exit = msgs.squash }
+perform.squash = function(self)
+  local args = { "git", "merge", "--squash", self.name, cwd = self.cwd, on_exit = msgs.squash }
   return Job(args)
 end
 
-perform.rebase = function(branch_name, cwd)
-  local args = { "git", "rebase", branch_name, on_exit = msgs.rebase, cwd = cwd }
+perform.rebase = function(self)
+  local args = { "git", "rebase", self.name, on_exit = msgs.rebase, cwd = self.cwd }
   return Job(args)
 end
 
-perform.merge = function(branch_name, body, cwd)
-  local args = { "git", "merge", "--no-ff", "-m", "merge: " .. branch_name }
-  if body ~= "" then
-    for _, line in ipairs(vim.split(body, "\n")) do
+perform.merge = function(self)
+  local args = { "git", "merge", "--no-ff", "-m", "merge: " .. self.name }
+  if self.body ~= "" then
+    for _, line in ipairs(vim.split(self.body, "\n")) do
       if line ~= "" then
         table.insert(args, "-m")
         table.insert(args, line)
       end
     end
   end
-  table.insert(args, branch_name)
+  table.insert(args, self.name)
   args.on_exit = msgs.merge
-  args.cwd = cwd
+  args.cwd = self.cwd
   return Job(args)
 end
 
+perform.pull = function(branch_name)
+  local job = Job { "git", "pull", "origin", branch_name, on_exit = msgs.pull }
+  return job
+end
+
+perform.switch = function(self)
+  return perform.pre_post_switch(
+    self.name,
+    self.cwd,
+    Job {
+      "git",
+      "switch",
+      self.name,
+      on_exit = msgs.switch,
+    }
+  )
+end
 ---Fetch new changes from remote.
 -- TODO: make it ignore fetching if not remote is avaliable
 -- TODO: which remote?
@@ -262,9 +365,16 @@ end
 ---@param cwd string
 ---@return Job
 perform.push = function(branch_name, cwd)
-  local remote = get.remote_name(cwd)
-  local args = { "git", "push", "-u", remote, branch_name, cwd = cwd, on_exit = msgs.push }
+  local args = { "git", "push", "-u", "origin", branch_name, cwd = cwd, on_exit = msgs.push }
   return Job(args)
+end
+
+perform.stash_pop = function(stashhash, cwd)
+  return Job { "git", "stash", "pop", stashhash, cwd = cwd, on_exit = msgs.stash_pop }
+end
+
+perform.stash_push = function(cwd)
+  return Job { "git", "stash", "push", "-u", cwd = cwd, on_exit = msgs.stash_push }
 end
 
 ---Checkout a given branch name. If branch name is master or main then then simply switch?
@@ -280,15 +390,13 @@ perform.checkout = function(branch_name, cwd)
 end
 
 ---Make a commit
----@param heading string @commit heading
----@param body string @commit body
----@param cwd string @path where the git command should be executed
+---@param self WorkTree
+---@param special string
 ---@return Job
-perform.commit = function(heading, body, cwd, special)
+perform.commit = function(self, special)
   local on_exit = special and msgs[special] or msgs.new_commit
-  local args = { "git", "commit", "-m", heading, cwd = cwd, on_exit = on_exit }
-  body = vim.split(body, "\n")
-  for _, line in ipairs(body) do
+  local args = { "git", "commit", "-m", self.title, cwd = self.cwd, on_exit = on_exit }
+  for _, line in ipairs(self.body) do
     if line ~= "" then
       args[#args + 1] = "-m"
       args[#args + 1] = line
@@ -303,13 +411,6 @@ end
 ---@return Job
 perform.gh_fork = function(cwd)
   return Job { "gh", "repo", "fork", "--remote=true", cwd = cwd, on_exit = msgs.fork }
-end
-
----Job to get pr info
----@param cwd string
----@return Job
-get.pr_info = function(cwd)
-  return Job { "gh", "pr", "view", "--json", "title", "--json", "body", cwd = cwd }
 end
 
 ---Job to update info
@@ -341,7 +442,7 @@ end
 ---@param cb any
 perform.create_branch = function(wt, cb)
   local has_remote = assert.has_remote(wt.cwd)
-  local base = get.default_branch_name(has_remote, wt.cwd)
+  local base = get.default_branch_name(wt.cwd)
 
   local checkout = perform.checkout(base, wt.cwd)
   local merge = perform.merge_remote(base, wt.cwd)
@@ -366,12 +467,12 @@ perform.create_branch = function(wt, cb)
   new:and_then_on_success(set_description)
   -- new:and_then_on_success(set_upstream)
   -- set_upstream:and_then_on_success(set_description)
-  set_description:after_success(function()
+  set_description:after_success(vim.schedule_wrap(function()
     print(string.format("created '%s' and switched to it", wt.name));
-    (cb or function() end)()
-  end)
+    (cb or function() end)(wt)
+  end))
 
-  checkout:start()
+  perform.pre_post_switch(wt.name, wt.cwd, checkout):start()
 end
 
 ---Job to create new pr
@@ -380,17 +481,18 @@ end
 -- fails when the branch is already connected to a pull request
 perform.pr_open = function(wt, cb)
   cb = cb and cb or function() end
-  local create = Job {
+  local create = {
     "gh",
     "pr",
     "create",
     "--title",
     wt.title,
     "--body",
-    wt.body,
+    table.concat(wt.body, "\n"),
     cwd = wt.cwd,
     on_exit = msgs.pr_open,
   }
+  create = Job(create)
   local fetch = perform.fetch(wt.cwd)
   local push = perform.push(wt.name, wt.cwd)
   local fork = perform.gh_fork(wt.cwd)
@@ -399,12 +501,12 @@ perform.pr_open = function(wt, cb)
   fetch:and_then_on_success(push)
 
   push:and_then_on_success(create)
-  create:after(cb)
+  create:after(vim.schedule_wrap(cb))
 
   push:after_failure(function()
     print "No write access, forking and creating pr instead ..."
     fork:and_then_on_success(create)
-    create:after(cb)
+    create:after(vim.schedule_wrap(cb))
     fork:after_failure(function()
       error "Failed to fork repo ..."
     end)
@@ -416,22 +518,185 @@ perform.pr_open = function(wt, cb)
   wt.has_pr = true
 end
 
-perform.pr_squash = function(body, cwd)
-  local args = { "gh", "pr", "merge", "--delete-branch", "--squash", "--body", body, cwd = cwd }
-  args.on_exit = msgs.pr_squash
+perform.pr_merge = function(self, type)
+  local args = { "gh", "pr", "merge", "--" .. type, "--body", self.body, cwd = self.cwd }
+  args.on_exit = msgs["pr_" .. type]
   return Job(args)
 end
 
-perform.pr_rebase = function(body, cwd)
-  local args = { "gh", "pr", "merge", "--rebase", "--delete-branch", "--body", body, cwd = cwd }
-  args.on_exit = msgs.pr_rebase
-  return Job(args)
+perform.delete = function(name, current, cwd)
+  --- switch to default branch --maybe use switch?
+  if current then
+    perform.checkout(get.default_branch_name(cwd)):sync()
+  end
+  Job { "git", "branch", "-D", name, cwd = cwd, on_exit = msgs.delete, sync = true }
 end
 
-perform.pr_merge = function(body, cwd)
-  local args = { "gh", "pr", "merge", "--merge", "--delete-branch", "--body", body, cwd = cwd }
-  args.on_exit = msgs.pr_rebase
-  return Job(args)
+M.picker = {}
+local picker = M.picker
+
+local s = require "telescope.actions.state"
+local a = require "telescope.actions"
+
+picker.delete_branch = function(_)
+  local entry = s.get_selected_entry()
+  local insert = vim.fn.mode() == "i"
+  if insert then
+    vim.cmd "stopinsert"
+  end
+
+  menu {
+    heading = "Delete " .. entry.subject .. "?",
+    size = { 3, 30 },
+    align_choice = "center",
+    choices = {
+      { text = "Yes", delete = true },
+      { text = "No", delete = false },
+    },
+    on_close = function(_, choice)
+      require("telescope.builtin").resume()
+      vim.wait(10)
+
+      if choice ~= nil and choice.delete then
+        local picker = s.get_current_picker(vim.api.nvim_get_current_buf())
+        picker:delete_selection(function()
+          perform.delete(entry.name, entry.current, entry.cwd)
+        end)
+      end
+
+      if insert then
+        vim.cmd "startinsert"
+      end
+    end,
+  }
+end
+
+picker.switch_branch = function(bufnr)
+  local entry = s.get_selected_entry()
+  a.close(bufnr)
+  return perform.switch(entry):start()
+end
+
+picker.create_branch = function(bufnr)
+  local insert = vim.fn.mode() == "i"
+  a.close(bufnr)
+
+  if insert then
+    vim.cmd "stopinsert"
+  end
+
+  require("worktree").create(nil, function(_)
+    require("telescope.builtin").resume { cache_index = 2 }
+
+    if insert then
+      vim.cmd "startinsert"
+    end
+
+    --- TODO: Add new branch to the menu
+    -- vim.wait(10)
+    -- if entry then
+    --   local picker = s.get_current_picker(vim.api.nvim_get_current_buf())
+    --   picker:add_selection {
+    --     title = entry.title,
+    --     subject = fmt.get_subject(entry.title) or entry.title,
+    --     scope = (fmt.get_type(entry.title) or "none") .. "/" .. (fmt.get_scope(entry.title) or "*"),
+    --     current = entry.name == get.name(entry.cwd):sync()[1],
+    --     cwd = entry.cwd,
+    --   }
+    -- end
+  end)
+end
+
+picker.edit_branch = function(bufnr)
+  local insert = vim.fn.mode() == "i"
+  local entry = s.get_selected_entry()
+  if insert then
+    vim.cmd "stopinsert"
+  end
+  a.close(bufnr)
+  require("worktree").edit(entry.name, entry.cwd, function()
+    if insert then
+      vim.cmd "startinsert"
+    end
+    require("telescope.builtin").resume()
+  end)
+end
+
+picker.create_pr = function(bufnr)
+  local entry = s.get_selected_entry()
+  a.close(bufnr)
+  require("worktree.model"):new(entry.name, entry.cwd):to_pr(function()
+    require("telescope.builtin").resume()
+  end)
+end
+
+picker.open_pr_in_web = function(_)
+  local entry = s.get_selected_entry()
+  local online = assert.is_online(true)
+  local get_open_prs = get.open_prs(entry.cwd)
+  online:after_failure(function()
+    print("Failed to check whether " .. entry.name .. " has an open pr or not.")
+  end)
+  online:and_then_on_success(get_open_prs)
+  get_open_prs:after(parse.has_pr(entry.name, function(info)
+    if not info.url then
+      return print("No PR found for " .. info.name .. " (@)")
+    end
+    --- TODO: support other platforms
+    Job({ "open", info.url }):start()
+  end))
+  online:start()
+end
+
+picker.merge_branch = function(_)
+  local entry = s.get_selected_entry()
+  local insert = vim.fn.mode() == "i"
+  local wt = require("worktree.model"):new(entry.name, entry.cwd)
+  local targets = get.branches(entry.cwd)
+  -- Ask what branch to merge to if it doesn't have a PR, and if it does just
+  -- let github handle everything.
+  -- or if current branch defer from target branch,
+  menu {
+    heading = "Choose merge type for " .. entry.subject,
+    size = { 3, 30 },
+    align_choice = "center",
+    choices = {
+      { text = "Squash" },
+      { text = "Merge" },
+      { text = "Rebase" },
+    },
+    on_close = function(_, choice)
+      if choice == nil then
+        return print "aborting merge!!"
+      end
+
+      table.sort(targets, function(a, b)
+        return #a.text < #b.text
+      end)
+
+      menu {
+        heading = "Choose target Branch to merge into",
+        size = { 5, 50 },
+        align_choice = "left",
+        choices = targets,
+        on_close = function(_, branch)
+          if not branch then
+            require("telescope.builtin").resume()
+            return
+          end
+          wt:merge(choice.text:lower(), branch.text, function()
+            require("telescope.builtin").resume()
+            if insert then
+              vim.cmd "startinsert"
+            end
+            return
+          end)
+        end,
+      }
+      --- ASK which branch to merge into? current or default
+      -- wt:merge(choice.text,)
+    end,
+  }
 end
 
 return M

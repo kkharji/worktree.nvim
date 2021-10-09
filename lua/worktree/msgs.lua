@@ -1,4 +1,7 @@
 local M = {}
+M.pull = {
+  err = "failed to merge remote to branch",
+}
 
 M.checkout = {
   err = "Failed to checked out/created a new branch",
@@ -10,16 +13,17 @@ M.merge_remote = {
 
 M.squash = {
   err = "Failed to squash and merge",
-  pass = "Squashed and merged successfully",
+  pass = "Successfully Squashed and merged to target branch",
 }
+
 M.merge = {
   err = "Failed to merge and create merge commit",
-  pass = "merged with merge commit successfully",
+  pass = "Successfully merged to target branch with a merge commit",
 }
 
 M.rebase = {
   err = "Failed to rebase and merge commit to target branch",
-  pass = "Rebased and merged successfully to target branch",
+  pass = "Successfully rebased and merged to target branch",
 }
 
 M.get_name = {
@@ -34,6 +38,11 @@ M.get_description = {
 M.set_name = {
   err = "Failed to update name",
   pass = "Updated branch name",
+}
+
+M.switch = {
+  err = "Failed to switch to target branch",
+  pass = "Successfully switched to target branch",
 }
 
 M.set_description = {
@@ -55,41 +64,56 @@ M.offline_save = {
 
 M.push = {
   err = "Failed to push %s to remote",
-  pass = "Pushed %s successfully to remote ...",
+  pass = "Successfully pushed to remote ...",
 }
 
 M.fork = {
   err = "Failed to fork",
-  pass = "Forked %s successfully.",
+  pass = "Successfully Forked target repo",
 }
 
 M.pr_open = {
   err = "Failed to create a pull request",
-  pass = "pull request has been created successfully.",
+  pass = "Successfully created a pull request",
 }
 
 M.pr_info = {
-  err = "Failed to get pr info",
+  err = "Failed to get pull request information",
 }
 
 M.pr_squash = {
   err = "Failed to squash and merge using github-cli",
-  pass = "Squashed and merged successfully using github-cli.",
+  pass = "Successfully squashed and merged target branch using github-cli.",
 }
 
 M.pr_rebase = {
   err = "Failed to rebase and merge using github-cli",
-  pass = "Successfully rebased using github-cli.",
+  pass = "Successfully rebased target branch using github-cli.",
 }
 
 M.pr_update = {
   err = "Failed to sync pr info for",
-  pass = "PR is synced successfully",
+  pass = "Successfully synced local branch description changes with remote",
 }
 
 M.pr_merge = {
   err = "Failed to merge and create merge commit using github-cli",
-  pass = "Successfully merged and rebased with merge commit using github-cli.",
+  pass = "Successfully merged and rebased with a merge commit using github-cli.",
+}
+
+M.delete = {
+  err = "Failed to delete branch",
+  pass = "Successfully delete target branch",
+}
+
+M.stash_pop = {
+  err = "Failed to pop stash",
+  pass = "Successfully popped last stash for the current branch",
+}
+
+M.stash_push = {
+  err = "Failed to push uncommited changes and untracked files. aborting",
+  pass = "Successfully saved currently uncommited changes and untracked files.",
 }
 
 for key, group in pairs(M) do
@@ -107,5 +131,8 @@ for key, group in pairs(M) do
     end
   end)
 end
+
+-- TODO: pass arguments using index. M[key] should return both call and __index that return a function using the index value as arugments
+-- msgs.switch[{ "branch name" }]
 
 return M
