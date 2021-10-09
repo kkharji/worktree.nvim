@@ -84,11 +84,9 @@ end
 ---the branch has pr, update pr
 ---@param buflines string[]
 Worktree.update = function(self, buflines, cb)
+  cb = vim.schedule_wrap(cb or function() end)
   if not buflines then
-    if cb then
-      cb()
-    end
-    return
+    return cb()
   end
   local change = self:parse(buflines)
   local diff = {}
@@ -109,15 +107,10 @@ Worktree.update = function(self, buflines, cb)
   self.body = diff.body and change.body or self.body
 
   get.pr_info(self.cwd, function(info)
-    if info and (info.title ~= info.title or info.body ~= self.body) then
-      perform.pr_update {
-        title = self.title,
-        body = self.body,
-        cb = cb,
-      }
-    else
-      (cb or function() end)()
+    if not info and info.title == info.title and info.body == self.body then
+      return cb()
     end
+    perform.pr_update({ title = self.title, body = self.body, cb = cb }):start()
   end):start()
 end
 
