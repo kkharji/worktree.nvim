@@ -22,6 +22,9 @@ get.branches = function(cwd)
   for i, line in ipairs(output) do
     output[i] = fmt.parse_branch_info_line(line, cwd)
   end
+  table.sort(output, function(a, _)
+    return a.current
+  end)
 
   return output
 end
