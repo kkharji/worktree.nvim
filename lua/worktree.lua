@@ -1,5 +1,6 @@
 local Worktree = require "worktree.model"
 local pickers = require "worktree.pickers"
+local menu = require "worktree.menu"
 local user = _G.user
 if not user then
   error "User not found"
@@ -7,23 +8,78 @@ end
 local Win = user.ui.float
 local M = {}
 
+M.commits = {
+  all = {
+    {
+      prefix = "feat",
+      title = "Feature",
+      desc = "Add new feature",
+    },
+    {
+      prefix = "perf",
+      title = "Performance",
+      desc = "Improve performance",
+    },
+    {
+      prefix = "chore",
+      title = "Chore",
+      desc = "Make changes not related to codebase",
+      not_branch_type = true,
+    },
+    {
+      prefix = "enh",
+      title = "Enhance",
+      desc = "Enhance an existing feature or scope.",
+    },
+    {
+      prefix = "ref",
+      title = "Refactor",
+      desc = "Make changes without effecting how things work",
+    },
+    {
+      prefix = "fix",
+      title = "Fix",
+      desc = "Fix a bug related to feature.",
+    },
+    {
+      prefix = "doc",
+      title = "Docs",
+      desc = "Make changes on codebase documentation",
+    },
+    {
+      prefix = "ci",
+      title = "Continues Integration",
+      desc = "Make changes on CI Jobs",
+    },
+    branch_template = {
+      "### Purpose",
+      "",
+    },
+  },
+}
+
 ---Create new branch from current working directory
 ---@param cwd string @current working directory
 M.create = function(cwd, cb)
   cwd = cwd or vim.loop.cwd()
-  pickers.pick_branch_type("Pick Branch Type", function(choice)
-    Win {
-      heading = choice.description,
-      content = Worktree:template(),
-      config = { insert = true, start_pos = { 1, 3 }, height = "20%" },
-      on_exit = function(_, abort, buflines)
-        if abort then
-          return (cb or function() end)(false)
-        end
-        Worktree:new(buflines, cwd, choice):create(cb)
-      end,
-    }
-  end)
+  local choices = M.commits[vim.loop.cwd()] or M.commits.all
+  pickers.pick_branch_type {
+    title = "Pick Branch Type",
+    choices = choices,
+    on_submit = function(choice)
+      Win {
+        heading = choice.description,
+        content = Worktree:template(),
+        config = { insert = true, start_pos = { 1, 3 }, height = "20%" },
+        on_exit = function(_, abort, buflines)
+          if abort then
+            return (cb or function() end)(false)
+          end
+          Worktree:new(buflines, cwd, choice):create(cb)
+        end,
+      }
+    end,
+  }
 end
 
 ---Edit details
@@ -103,19 +159,26 @@ end
 
 M.switcher = require("worktree.pickers").switcher
 
-M.commit_changes = function(all, amend)
-  pickers.pick_branch_type("Pick commit type >", function(choice)
-    Win {
-      heading = "Write commit message", --- TODO: have branch name "commit to %s"
-      --- TODO: have changes made in the buffer
-      content = { choice.prefix .. ": ", "", "" },
-      config = {
-        insert = true,
-        start_pos = { 1, #choice.prefix + 2 },
-        filetype = "gitcommit",
-      },
-    }
-  end)
+M.commit_changes = function(amend)
+  local choices = M.commits[vim.loop.cwd()] or M.commits.all
+  pickers.pick_branch_type {
+    title = "Commit Type: ",
+    choices = choices,
+    on_submit = function(choice)
+      Win {
+        heading = "Write commit message", --- TODO: have branch name "commit to %s"
+        --- TODO: have changes made in the buffer
+        content = { choice.prefix .. ": ", "", "" },
+        config = {
+          insert = true,
+          start_pos = { 1, #choice.prefix + 2 },
+          filetype = "gitcommit",
+        },
+      }
+    end,
+  }
 end
+
+M.commit_changes()
 
 return M
