@@ -253,7 +253,7 @@ Worktree.commit = function(self, content, amend)
     if code ~= 0 then
       error("Failed to update git tree." .. table.concat(x:result(), "\n"))
     end
-    vim.notify(string.format([[Updated Git-Tree "%s": current_commit "%s"]], self.name, content[1]))
+    vim.notify(string.format([[Updated %s with "%s"]], self.name, content[1]))
   end))
 
   if staged_files then
