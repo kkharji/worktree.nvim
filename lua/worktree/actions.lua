@@ -537,8 +537,8 @@ perform.pr_open = function(wt, cb)
   wt.has_pr = true
 end
 
-perform.pr_merge = function(self, type)
-  local args = { "gh", "pr", "merge", "--" .. type, "--body", self.body, cwd = self.cwd }
+perform.pr_merge = function(self, type) -- TODO: Support editing body somehow
+  local args = { "gh", "pr", "merge", "--" .. type, "--body", table.concat(self.body, "\n"), cwd = self.cwd }
   args.on_exit = msgs["pr_" .. type]
   I(args)
   return Job(args)
