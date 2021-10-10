@@ -1,12 +1,14 @@
 R "worktree.model"
 local Worktree = require "worktree.model"
 local pickers = require "worktree.pickers"
+local Input = require "worktree.input"
 local config = require "worktree.config"
 local user = _G.user
+local fmt = string.format
+local Win = user.ui.float
 if not user then
   error "User not found"
 end
-local Win = user.ui.float
 local M = {}
 
 ---Create new branch from current working directory
@@ -148,7 +150,31 @@ M.quick_commit = function(amend, cwd)
       title = "Commit Type:",
       choices = choices,
       on_submit = function(choice)
-        edit(vim.tbl_flatten { choice.prefix .. ": ", "", "" }, choice)
+        Input {
+          heading = "commit: (scope, subject) or (subject)",
+          on_submit = function(val)
+            if not val then
+              error "quick_commit: no title given!!"
+            end
+            local title
+            if val:match "," then
+              val = vim.split(val, ",")
+              local part1 = val[2] and fmt("(%s):", val[1]) or ":"
+              local part2 = val[2] and val[2] or val[1]
+              title = part1 .. part2
+            else
+              title = val
+            end
+            edit(
+              vim.tbl_flatten {
+                choice.prefix .. title,
+                "",
+                "",
+              },
+              choice
+            )
+          end,
+        }
       end,
     }
   end
