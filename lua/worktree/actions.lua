@@ -108,7 +108,7 @@ end
 get.description = function(branch_name, cwd)
   local path = string.format("branch.%s.description", branch_name)
   local args = { "git", "config", path, cwd = cwd }
-  args.on_exit = msgs.get_description
+  args.on_exit = (branch_name == "master" or branch_name == "main") and nil or msgs.get_description
   return Job(args)
 end
 

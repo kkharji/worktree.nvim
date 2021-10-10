@@ -23,7 +23,7 @@ M.pick_branch_type = function(opts)
   picker(dropdown, {
     prompt_title = opts.title,
     prompt_prefix = "",
-    initial_mode = "normal",
+    -- initial_mode = "normal",
     finder = finder {
       results = opts.choices,
       entry_maker = function(entry)
@@ -60,7 +60,7 @@ M.pick_branch_merge_type = function(cb)
   picker(dropdown, {
     prompt_title = "Pick Merge type",
     prompt_prefix = "",
-    initial_mode = "normal",
+    -- initial_mode = "normal",
     sorter = sorter {},
     finder = finder {
       results = {
@@ -104,7 +104,7 @@ M.switcher = function(opts)
     prompt_prefix = "",
     prompt_title = name .. " Worktree",
     sorter = sorter {},
-    initial_mode = "normal",
+    -- initial_mode = "normal",
     hide_cursor = true,
     attach_mappings = function(_, map)
       map("i", "<C->", pactions.create_branch)
