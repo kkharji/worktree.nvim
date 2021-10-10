@@ -104,14 +104,14 @@ M.switcher = function(opts)
     prompt_prefix = "",
     prompt_title = name .. " Worktree",
     sorter = sorter {},
-    -- initial_mode = "normal",
-    hide_cursor = true,
+    initial_mode = "normal",
     attach_mappings = function(_, map)
       map("i", "<C->", pactions.create_branch)
-      map("n", "n", pactions.create_branch)
+      map("n", "N", pactions.create_branch)
 
       map("i", "<C-d>", pactions.delete_branch)
       map("n", "d", pactions.delete_branch)
+      --- TODO: delete without confirmation
 
       map("i", "<C-s>", pactions.merge_branch)
       map("n", "m", pactions.merge_branch)
