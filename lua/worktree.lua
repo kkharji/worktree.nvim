@@ -1,3 +1,4 @@
+R "worktree.model"
 local Worktree = require "worktree.model"
 local pickers = require "worktree.pickers"
 local config = require "worktree.config"
@@ -111,26 +112,46 @@ end
 
 M.switcher = require("worktree.pickers").switcher
 
-M.commit_changes = function(amend)
+M.quick_commit = function(amend, cwd)
   local choices = config.commits[vim.loop.cwd()] or config.commits.all
-  pickers.pick_branch_type {
-    title = "Commit Type:",
-    choices = choices,
-    on_submit = function(choice)
-      Win {
-        heading = "Write commit message", --- TODO: have branch name "commit to %s"
-        --- TODO: have changes made in the buffer
-        content = { choice.prefix .. ": ", "", "" },
-        config = {
-          insert = true,
-          start_pos = { 1, #choice.prefix + 2 },
-          filetype = "gitcommit",
-        },
-      }
-    end,
-  }
-end
+  local worktree = Worktree:new("current", cwd or vim.loop.cwd())
+  local status = worktree:status(true)
+  if status == {} then
+    return
+  end
 
-M.commit_changes()
+  --- TODO: should it prompt to add files if nothing is staged?
+
+  local edit = function(content, choice)
+    local column = type(choice) == "table" and #choice.prefix + 2 or 15
+
+    Win {
+      heading = "Commit to " .. worktree.name,
+      content = vim.tbl_flatten { content, status },
+      config = {
+        insert = amend == nil,
+        start_pos = { 1, column },
+        filetype = "gitcommit",
+      },
+      on_exit = function(_, abort, content)
+        if not abort then
+          worktree:commit(content, amend)
+        end
+      end,
+    }
+  end
+
+  if amend then
+    edit(worktree:last_commit())
+  else
+    pickers.pick_branch_type {
+      title = "Commit Type:",
+      choices = choices,
+      on_submit = function(choice)
+        edit(vim.tbl_flatten { choice.prefix .. ": ", "", "" }, choice)
+      end,
+    }
+  end
+end
 
 return M

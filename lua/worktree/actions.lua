@@ -11,6 +11,14 @@ local Job = require "worktree.actions.wrapper"
 M.get = {}
 local get = M.get
 
+get.status = function(self)
+  return Job { "git", "status", "--untracked-files", cwd = self.cwd }
+end
+
+get.last_commit = function(self)
+  return Job { "git", "log", "-1", "--pretty=%B", cwd = self.cwd }
+end
+
 get.branches = function(cwd)
   local format = "%(HEAD)"
     .. "%(refname)"
@@ -391,12 +399,23 @@ end
 
 ---Make a commit
 ---@param self WorkTree
+---@param body string[]|nil
 ---@param special string
 ---@return Job
-perform.commit = function(self, special)
+perform.commit = function(self, body, special)
+  local amend = special == "amend" and "--amend" or nil
   local on_exit = special and msgs[special] or msgs.new_commit
-  local args = { "git", "commit", "-m", self.title, cwd = self.cwd, on_exit = on_exit }
-  for _, line in ipairs(self.body) do
+
+  local args = {}
+  if amend then
+    args = { "git", "commit", amend }
+  else
+    args = { "git", "commit" }
+  end
+  args.on_exit = on_exit
+  args.cwd = self.cwd
+
+  for _, line in ipairs(body or self.body) do
     if line ~= "" then
       args[#args + 1] = "-m"
       args[#args + 1] = line
@@ -530,6 +549,14 @@ perform.delete = function(name, current, cwd)
     perform.checkout(get.default_branch_name(cwd)):sync()
   end
   Job { "git", "branch", "-D", name, cwd = cwd, on_exit = msgs.delete, sync = true }
+end
+
+perform.add = function(self, unstaged_files)
+  local args = { "git", "add", cwd = self.cwd }
+  args = vim.tbl_flatten { args, unstaged_files }
+  args.cwd = self.cwd
+  -- args.on_exit = msgs.stage
+  return Job(args)
 end
 
 M.picker = {}
