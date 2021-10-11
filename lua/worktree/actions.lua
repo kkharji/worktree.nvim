@@ -539,17 +539,16 @@ end
 
 perform.pr_merge = function(self, strategy) -- TODO: Support editing body somehow
   local content = type(self.body) == "table" and table.concat(self.body, "\n") or self.body
-  local args = { "gh", "pr", "merge", "--" .. strategy, "--body", content, cwd = self.cwd }
+  local args = { "gh", "pr", "merge", "--delete-branch", "--" .. strategy, "--body", content, cwd = self.cwd }
   args.on_exit = msgs["pr_" .. strategy]
   return Job(args)
 end
 
-perform.delete = function(name, current, cwd)
-  --- switch to default branch --maybe use switch?
+perform.delete = function(name, cwd, current)
   if current then
-    perform.checkout(get.default_branch_name(cwd)):sync()
+    return perform.checkout(get.default_branch_name(cwd))
   end
-  Job { "git", "branch", "-D", name, cwd = cwd, on_exit = msgs.delete, sync = true }
+  return Job { "git", "branch", "-D", name, cwd = cwd, on_exit = msgs.delete }
 end
 
 perform.add = function(self, unstaged_files)
@@ -588,7 +587,7 @@ picker.delete_branch = function(_)
       if choice ~= nil and choice.delete then
         local picker = s.get_current_picker(vim.api.nvim_get_current_buf())
         picker:delete_selection(function()
-          perform.delete(entry.name, entry.current, entry.cwd)
+          perform.delete(entry.name, entry.cwd, entry.current):sync()
         end)
       end
 

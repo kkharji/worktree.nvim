@@ -219,8 +219,10 @@ Worktree.merge = function(self, type, target, cb)
         print "reflect changes locally"
         local switch = perform.switch { name = parent, cwd = self.cwd }
         local pull = perform.pull(parent)
+        local delete = perform.delete(self.name, self.cwd)
         switch:and_then_on_success(pull)
-        pull:and_then_on_success(cb)
+        pull:and_then_on_success(delete)
+        delete:after(cb)
         switch:start()
       end):start()
     end)
