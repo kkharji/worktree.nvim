@@ -16,14 +16,14 @@ local M = {}
 local get_commit_types = function(cwd)
   local commits = config.commits[parse.repo_parent_dir_name(cwd)] or config.commits.all
   return vim.tbl_filter(function(i)
-    return not i.branch_type
+    return not i.branch_only
   end, commits)
 end
 
 local get_branch_types = function(cwd)
   local commits = config.commits[parse.repo_parent_dir_name(cwd)] or config.commits.all
   return vim.tbl_filter(function(i)
-    return not i.commit_type
+    return not i.commit_only
   end, commits)
 end
 

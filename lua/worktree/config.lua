@@ -15,7 +15,7 @@ M.commits = {
       prefix = "chore",
       title = "Chore",
       desc = "Make changes not related to codebase",
-      commit_type = true,
+      commit_only = true,
     },
     {
       prefix = "enh",
