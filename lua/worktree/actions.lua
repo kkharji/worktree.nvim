@@ -11,6 +11,14 @@ local Job = require "worktree.actions.wrapper"
 M.get = {}
 local get = M.get
 
+get.status = function(self)
+  return Job { "git", "status", "--untracked-files", cwd = self.cwd }
+end
+
+get.last_commit = function(self)
+  return Job { "git", "log", "-1", "--pretty=%B", cwd = self.cwd }
+end
+
 get.branches = function(cwd)
   local format = "%(HEAD)"
     .. "%(refname)"
@@ -100,7 +108,7 @@ end
 get.description = function(branch_name, cwd)
   local path = string.format("branch.%s.description", branch_name)
   local args = { "git", "config", path, cwd = cwd }
-  args.on_exit = msgs.get_description
+  args.on_exit = (branch_name ~= "master" and branch_name ~= "main") and msgs.get_description or nil
   return Job(args)
 end
 
@@ -391,12 +399,23 @@ end
 
 ---Make a commit
 ---@param self WorkTree
+---@param body string[]|nil
 ---@param special string
 ---@return Job
-perform.commit = function(self, special)
+perform.commit = function(self, body, special)
+  local amend = special == "amend" and "--amend" or nil
   local on_exit = special and msgs[special] or msgs.new_commit
-  local args = { "git", "commit", "-m", self.title, cwd = self.cwd, on_exit = on_exit }
-  for _, line in ipairs(self.body) do
+
+  local args = {}
+  if amend then
+    args = { "git", "commit", amend }
+  else
+    args = { "git", "commit" }
+  end
+  args.on_exit = on_exit
+  args.cwd = self.cwd
+
+  for _, line in ipairs(body or self.body) do
     if line ~= "" then
       args[#args + 1] = "-m"
       args[#args + 1] = line
@@ -518,9 +537,10 @@ perform.pr_open = function(wt, cb)
   wt.has_pr = true
 end
 
-perform.pr_merge = function(self, type)
-  local args = { "gh", "pr", "merge", "--" .. type, "--body", self.body, cwd = self.cwd }
-  args.on_exit = msgs["pr_" .. type]
+perform.pr_merge = function(self, strategy) -- TODO: Support editing body somehow
+  local content = type(self.body) == "table" and table.concat(self.body, "\n") or self.body
+  local args = { "gh", "pr", "merge", "--" .. strategy, "--body", content, cwd = self.cwd }
+  args.on_exit = msgs["pr_" .. strategy]
   return Job(args)
 end
 
@@ -530,6 +550,14 @@ perform.delete = function(name, current, cwd)
     perform.checkout(get.default_branch_name(cwd)):sync()
   end
   Job { "git", "branch", "-D", name, cwd = cwd, on_exit = msgs.delete, sync = true }
+end
+
+perform.add = function(self, unstaged_files)
+  local args = { "git", "add", cwd = self.cwd }
+  args = vim.tbl_flatten { args, unstaged_files }
+  args.cwd = self.cwd
+  -- args.on_exit = msgs.stage
+  return Job(args)
 end
 
 M.picker = {}

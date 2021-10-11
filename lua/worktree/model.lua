@@ -22,6 +22,7 @@ local Worktree = {
 ---@overload fun(self: WorkTree, name: string, cwd: string): WorkTree
 ---@return WorkTree
 Worktree.new = function(self, arg, cwd, typeinfo)
+  cwd = cwd or vim.loop.cwd()
   local o = { cwd = cwd }
 
   if type(arg) == "table" then
@@ -52,7 +53,54 @@ end
 ---Format with a given branch choice
 ---@return string[]
 Worktree.template = function(_)
-  return { "# ", "", "#### Purpose", "" }
+  return { "# ", "", "### Purpose", "" }
+end
+
+Worktree.status = function(self, forpreview)
+  local S = { staged = {}, unstaged = {} }
+  local res, _ = get.status(self):sync()
+
+  for _, file in ipairs(res) do
+    if file:sub(1, 1) == " " or file:sub(1, 2) == "??" then
+      S.unstaged[#S.unstaged + 1] = file
+    else
+      S.staged[#S.staged + 1] = file
+    end
+  end
+
+  if S.staged == {} and S.unstaged == {} then
+    print "Git Tree is clean, aborting commit"
+    return {}
+  end
+
+  if forpreview then
+    local lines = {}
+    if S.staged[1] then
+      lines[#lines + 1] = "# Staged"
+      for _, entry in ipairs(S.staged) do
+        lines[#lines + 1] = "#   " .. entry
+      end
+    end
+    if S.unstaged[1] then
+      if S.staged[1] then
+        lines[#lines + 1] = "# Unstaged"
+      else
+        lines[#lines + 1] = "# Warning: auto-staging the following"
+      end
+
+      for _, entry in ipairs(S.unstaged) do
+        lines[#lines + 1] = "#   " .. entry
+      end
+    end
+    return lines
+  end
+
+  for type, entries in pairs(S) do
+    for index, value in ipairs(entries) do
+      S[type][index] = value:sub(4, -1)
+    end
+  end
+  return S
 end
 
 ---Parse bufferline to {title, name, body}
@@ -64,7 +112,7 @@ Worktree.parse = function(_, bufferlines, typeinfo)
   }
 
   if typeinfo then
-    local type = typeinfo.name:lower()
+    local type = typeinfo.prefix:lower()
     if p.title:match ":" then
       local parts = vim.split(p.title, ":")
       p.title = string.format("%s(%s): %s", type, parts[1], parts[2])
@@ -134,7 +182,7 @@ local do_locally = function(self, type, checkout, cb)
   checkout:and_then_on_success(run)
 
   if type == "squash" then
-    local commit = perform.commit(self, "squash")
+    local commit = perform.commit(self, nil, "squash")
     run:and_then_on_success(commit)
     commit:after(vim.schedule_wrap(cb))
   else
@@ -185,6 +233,42 @@ Worktree.merge = function(self, type, target, cb)
   end)
 
   isonline:start()
+end
+
+--- If there are staged files then use them
+--- If there isn't any staged files then staged everything
+Worktree.commit = function(self, content, amend)
+  local status = self:status(false)
+  local staged_files = status.staged[1] ~= nil
+  content = vim.tbl_filter(function(line)
+    return line:sub(1, 1) ~= "#"
+  end, content)
+  if not staged_files and not status.unstaged[1] then
+    --- AUTO AMEND
+    amend = true
+  end
+  local commit = perform.commit(self, content, amend and "amend" or nil)
+
+  commit:after(vim.schedule_wrap(function(x, code)
+    if code ~= 0 then
+      error("Failed to update git tree." .. table.concat(x:result(), "\n"))
+    end
+    vim.notify(string.format([[Updated %s with "%s"]], self.name, content[1]))
+  end))
+
+  if staged_files then
+    commit:start()
+  elseif status.unstaged[1] then
+    local add = perform.add(self, status.unstaged)
+    add:and_then_on_success(commit)
+    add:start()
+  else
+    commit:start()
+  end
+end
+
+Worktree.last_commit = function(self)
+  return get.last_commit(self):sync()
 end
 
 return Worktree

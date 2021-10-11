@@ -35,4 +35,9 @@ M.get_parent = function(name, str)
   return possible[1]
 end
 
+M.repo_parent_dir_name = function(cwd)
+  local parts = vim.split(cwd, "/")
+  return parts[#parts - 1] .. "/" .. parts[#parts]
+end
+
 return M
