@@ -202,6 +202,7 @@ Worktree.merge = function(self, type, target, cb)
   cb = vim.schedule_wrap(cb or function() end)
 
   isonline:and_then_on_success(fetch)
+
   fetch:and_then_wrap(get.pr_info(self.cwd, function(info)
     if info == nil then
       return do_locally(self, type, checkout, cb)
@@ -230,8 +231,11 @@ Worktree.merge = function(self, type, target, cb)
   end))
 
   isonline:after_failure(function()
-    print "using local"
-    -- do_locally(self, type, checkout, cb)
+    if not vim.loop.fs_stat(self.cwd .. "/.git/refs/remotes/origin/" .. self.name) then
+      do_locally(self, type, checkout, cb)
+    else
+      print "Device must be connected to the network in order to do merge."
+    end
   end)
 
   isonline:start()
