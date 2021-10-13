@@ -507,7 +507,7 @@ perform.pr_open = function(wt, cb)
     "--title",
     wt.title,
     "--body",
-    table.concat(wt.body, "\n"),
+    type(wt.body) == "table" and table.concat(wt.body, "\n") or wt.body,
     cwd = wt.cwd,
     on_exit = msgs.pr_open,
   }

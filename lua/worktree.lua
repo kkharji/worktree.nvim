@@ -172,11 +172,11 @@ M.quick_commit = function(amend, cwd)
           local title
           if val:match "," then
             val = vim.split(val, ",")
-            local part1 = val[2] and fmt("(%s):", val[1]) or ":"
+            local part1 = val[2] and fmt("(%s): ", val[1]) or ""
             local part2 = val[2] and val[2] or val[1]
             title = part1 .. part2
           else
-            title = val
+            title = ": " .. val
           end
           edit(
             vim.tbl_flatten {
