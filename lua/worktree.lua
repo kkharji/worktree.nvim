@@ -31,6 +31,7 @@ end
 ---@param cwd string @current working directory
 M.create = function(cwd, cb)
   cwd = cwd or vim.loop.cwd()
+  local base, _ = require('worktree.actions').get.name(cwd):sync()
   pickers.pick_branch_type {
     title = "Pick Branch Type:",
     choices = get_branch_types(cwd),
@@ -43,7 +44,10 @@ M.create = function(cwd, cb)
           if abort then
             return (cb or function() end)(false)
           end
-          Worktree:new(buflines, cwd, choice):create(cb)
+          local wt = Worktree:new(buflines, cwd, choice)
+          --- TODO: are u sure? without even asking for base?
+          wt.base = base[1]
+          wt:create(cb)
         end,
       }
     end,

@@ -137,12 +137,7 @@ get.commits = function(branch_name, cwd)
 end
 
 get.default_branch_name = function(cwd)
-  local default = vim.loop.fs_stat(cwd .. "/.git/refs/heads/master") and "master" or "main"
-  if default == "main" then
-    local res, _ = Job { "git", "config", "--global", "init.defaultBranch", sync = true }
-    default = res[1]
-  end
-  return default
+  return vim.loop.fs_stat(cwd .. "/.git/refs/heads/master") and "master" or "main"
 end
 
 get.last_stash_for = function(branch_name, cwd)
@@ -305,6 +300,7 @@ end
 ---@return Job
 perform.merge_remote = function(branch_name, cwd)
   local remote_name = get.remote_name(cwd)
+  I(branch_name)
   local args = { "git", "merge", remote_name .. "/" .. branch_name, cwd = cwd }
   args.on_exit = msgs.merge_remote
   return Job(args)
@@ -461,26 +457,26 @@ end
 ---@param cb any
 perform.create_branch = function(wt, cb)
   local has_remote = assert.has_remote(wt.cwd)
-  local base = get.default_branch_name(wt.cwd)
+  local base = wt.base or get.default_branch_name(wt.cwd)
 
-  local checkout = perform.checkout(base, wt.cwd)
+  local switch_to_base = perform.switch({ cwd = wt.cwd, name = base })
   local merge = perform.merge_remote(base, wt.cwd)
   local new = perform.checkout(wt.name, wt.cwd)
   local set_description = set.description(wt.name, wt.body, wt.cwd)
   -- local set_upstream = set.upstream(wt.name, wt.upstream, wt.cwd)
 
-  checkout:after_failure(function()
+  switch_to_base:after_failure(function()
     print "checkout failed"
   end)
 
   if has_remote then
-    checkout:and_then_on_success(merge)
+    switch_to_base:and_then_on_success(merge)
     merge:and_then_on_success(new)
     merge:after_failure(function()
       print "merge failed"
     end)
   else
-    checkout:and_then_on_success(new)
+    switch_to_base:and_then_on_success(new)
   end
 
   new:and_then_on_success(set_description)
@@ -491,7 +487,7 @@ perform.create_branch = function(wt, cb)
     (cb or function() end)(wt)
   end))
 
-  perform.pre_post_switch(wt.name, wt.cwd, checkout):start()
+  perform.pre_post_switch(wt.name, wt.cwd, switch_to_base):start()
 end
 
 ---Job to create new pr

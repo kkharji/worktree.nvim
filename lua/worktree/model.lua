@@ -10,6 +10,7 @@ local parse = require "worktree.parse"
 ---@field body string
 ---@field type table
 ---@field cwd string
+---@field base string
 ---@field upstream string @name of upstream repo
 local Worktree = {
   exists = function(self, name)
