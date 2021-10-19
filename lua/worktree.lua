@@ -31,7 +31,7 @@ end
 ---@param cwd string @current working directory
 M.create = function(cwd, cb)
   cwd = cwd or vim.loop.cwd()
-  local base, _ = require('worktree.actions').get.name(cwd):sync()
+  local base, _ = require("worktree.actions").get.name(cwd):sync()
   pickers.pick_branch_type {
     title = "Pick Branch Type:",
     choices = get_branch_types(cwd),
@@ -175,7 +175,7 @@ M.quick_commit = function(amend, cwd)
           end
           local title
           if val:match "," then
-            val = vim.split(val, ",")
+            val = vim.split(val, ", ")
             local part1 = val[2] and fmt("(%s): ", val[1]) or ""
             local part2 = val[2] and val[2] or val[1]
             title = part1 .. part2
