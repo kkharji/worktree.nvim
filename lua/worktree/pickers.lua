@@ -106,7 +106,7 @@ M.switcher = function(opts)
     sorter = sorter {},
     initial_mode = "normal",
     attach_mappings = function(_, map)
-      map("i", "<C->", pactions.create_branch)
+      map("i", "<C-n>", pactions.create_branch)
       map("n", "N", pactions.create_branch)
 
       map("i", "<C-d>", pactions.delete_branch)

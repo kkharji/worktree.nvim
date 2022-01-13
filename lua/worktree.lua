@@ -147,7 +147,7 @@ M.quick_commit = function(amend, cwd)
       heading = "Commit to " .. worktree.name,
       content = vim.tbl_flatten { content, status },
       config = {
-        insert = amend == nil,
+        insert = false,
         start_pos = { 1, column },
         filetype = "gitcommit",
       },
